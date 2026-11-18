@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Check required configuration
+      - name: Report optional runtime configuration
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
           APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
@@ -24,29 +24,28 @@ jobs:
           missing=0
           if [[ -z "$GOOGLE_WEB_CLIENT_ID" ]]; then
             echo "❌ GOOGLE_WEB_CLIENT_ID: missing" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Missing repository Actions secret GOOGLE_WEB_CLIENT_ID"
+            echo "::warning::Missing repository Actions secret GOOGLE_WEB_CLIENT_ID"
             missing=1
           elif [[ "$GOOGLE_WEB_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
             echo "❌ GOOGLE_WEB_CLIENT_ID: invalid format" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Invalid Google OAuth web client ID format"
+            echo "::warning::Invalid Google OAuth web client ID format"
             missing=1
           else
             echo "✅ GOOGLE_WEB_CLIENT_ID: configured" >> "$GITHUB_STEP_SUMMARY"
           fi
           if [[ -z "$APPS_SCRIPT_URL" ]]; then
             echo "❌ APPS_SCRIPT_URL: missing" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Missing repository Actions secret APPS_SCRIPT_URL"
+            echo "::warning::Missing repository Actions secret APPS_SCRIPT_URL"
             missing=1
           elif [[ "$APPS_SCRIPT_URL" != https://script.google.com/macros/s/*/exec ]]; then
             echo "❌ APPS_SCRIPT_URL: invalid format" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::APPS_SCRIPT_URL must be a deployed Apps Script web app URL"
+            echo "::warning::APPS_SCRIPT_URL must be a deployed Apps Script web app URL"
             missing=1
           else
             echo "✅ APPS_SCRIPT_URL: configured" >> "$GITHUB_STEP_SUMMARY"
           fi
           if (( missing )); then
-            echo "### Result: FAILED — configuration required; no APK produced" >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+            echo "⚠️ OAuth/API not configured: APK will build, but Google sign-in will not work until configured." >> "$GITHUB_STEP_SUMMARY"
           fi
       - uses: subosito/flutter-action@v2
         with:
