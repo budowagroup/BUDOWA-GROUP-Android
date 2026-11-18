@@ -55,7 +55,10 @@ class _BudowaAppState extends State<BudowaApp> {
     setState(() { busy = true; error = null; });
     try {
       final signed = await google.signIn();
-      if (signed == null) return;
+      if (signed == null) {
+        if (mounted) setState(() => error = null);
+        return;
+      }
       final auth = await signed.authentication;
       final idToken = auth.idToken;
       if (idToken == null) throw Exception('Google не повернув ID Token. Перевірте OAuth конфігурацію.');
@@ -76,14 +79,23 @@ class _BudowaAppState extends State<BudowaApp> {
     if (t == null) return;
     setState(() { busy = true; error = null; });
     try {
-      final result = await request({'action': 'read', 'book': book, 'tab': tab, 'start': 4, 'limit': 30}, t);
+      final selectedBook = book;
+      final selectedTab = tab;
+      final currentAccount = account;
+      if (currentAccount == null) return;
+      final currentAuth = await currentAccount.authentication;
+      final freshToken = currentAuth.idToken;
+      if (freshToken == null) throw Exception('Не вдалося оновити Google ID Token. Увійдіть повторно.');
+      final result = await request({'action': 'read', 'book': selectedBook, 'tab': selectedTab, 'start': 4, 'limit': 30}, freshToken);
       final raw = result['rows'];
       if (raw is! List || raw.any((row) => row is! List)) {
         throw const FormatException('Некоректний формат рядків API');
       }
       final parsed = raw.map<List<String>>((row) =>
           (row as List).map<String>((cell) => '$cell').toList()).toList();
-      if (mounted) setState(() => rows = parsed);
+      if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
+        setState(() { token = freshToken; rows = parsed; });
+      }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
     } finally {
@@ -92,8 +104,8 @@ class _BudowaAppState extends State<BudowaApp> {
   }
 
   Future<void> logout() async {
-    await google.signOut();
     if (mounted) setState(() { account = null; token = null; role = null; rows = []; error = null; });
+    await google.signOut();
   }
 
   @override
