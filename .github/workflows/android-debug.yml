@@ -11,9 +11,43 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Check required configuration
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+        shell: bash
+        run: |
+          echo "## BUDOWA GROUP — Android TEST" >> "$GITHUB_STEP_SUMMARY"
+          missing=0
+          if [[ -z "$GOOGLE_WEB_CLIENT_ID" ]]; then
+            echo "❌ GOOGLE_WEB_CLIENT_ID: missing" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Missing repository Actions secret GOOGLE_WEB_CLIENT_ID"
+            missing=1
+          elif [[ "$GOOGLE_WEB_CLIENT_ID" != *.apps.googleusercontent.com ]]; then
+            echo "❌ GOOGLE_WEB_CLIENT_ID: invalid format" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Invalid Google OAuth web client ID format"
+            missing=1
+          else
+            echo "✅ GOOGLE_WEB_CLIENT_ID: configured" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ -z "$APPS_SCRIPT_URL" ]]; then
+            echo "❌ APPS_SCRIPT_URL: missing" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Missing repository Actions secret APPS_SCRIPT_URL"
+            missing=1
+          elif [[ "$APPS_SCRIPT_URL" != https://script.google.com/macros/s/*/exec ]]; then
+            echo "❌ APPS_SCRIPT_URL: invalid format" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::APPS_SCRIPT_URL must be a deployed Apps Script web app URL"
+            missing=1
+          else
+            echo "✅ APPS_SCRIPT_URL: configured" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if (( missing )); then
+            echo "### Result: FAILED — configuration required; no APK produced" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -28,27 +62,6 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze --no-fatal-infos
-      - name: Validate Google configuration
-        env:
-          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
-          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
-        run: |
-          if [ -z "$GOOGLE_WEB_CLIENT_ID" ]; then
-            echo "::error::Missing GitHub Actions secret GOOGLE_WEB_CLIENT_ID"
-            exit 1
-          fi
-          if [ -z "$APPS_SCRIPT_URL" ]; then
-            echo "::error::Missing GitHub Actions secret APPS_SCRIPT_URL"
-            exit 1
-          fi
-          case "$GOOGLE_WEB_CLIENT_ID" in
-            *.apps.googleusercontent.com) ;;
-            *) echo "::error::GOOGLE_WEB_CLIENT_ID is not a Google OAuth web client ID"; exit 1 ;;
-          esac
-          case "$APPS_SCRIPT_URL" in
-            https://script.google.com/macros/s/*/exec) ;;
-            *) echo "::error::APPS_SCRIPT_URL must be a deployed Apps Script web app URL"; exit 1 ;;
-          esac
       - name: Build test-only debug APK
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
@@ -57,9 +70,30 @@ jobs:
           flutter build apk --debug \
             --dart-define="GOOGLE_WEB_CLIENT_ID=$GOOGLE_WEB_CLIENT_ID" \
             --dart-define="APPS_SCRIPT_URL=$APPS_SCRIPT_URL"
+      - name: Inspect built APK and signing fingerprint
+        shell: bash
+        run: |
+          APK=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$APK"
+          echo "### Result: SUCCESS — APK built" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifact: budowa-group-test-debug-apk" >> "$GITHUB_STEP_SUMMARY"
+          echo "- APK size: $(du -h "$APK" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          if command -v apksigner >/dev/null 2>&1; then
+            apksigner verify --print-certs "$APK" | grep -E 'Signer #1 certificate SHA-1 digest' | tee /tmp/apk-sha1.txt
+            echo "### SHA-1 of this APK (not a stable release signing key)" >> "$GITHUB_STEP_SUMMARY"
+            cat /tmp/apk-sha1.txt >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "SHA-1 unavailable: apksigner not on PATH" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "⚠️ This CI generates a fresh Android debug signing key on ephemeral runners. Its SHA-1 may change between runs. Configure a persistent signing key before registering a long-lived Android OAuth client." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: budowa-group-test-debug-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "### Build failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Open the failed step in the build job to see the exact error." >> "$GITHUB_STEP_SUMMARY"
