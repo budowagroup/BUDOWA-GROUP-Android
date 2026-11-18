@@ -1,3 +1,4 @@
+import 'hours_entry_form.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -143,6 +144,8 @@ class _BudowaAppState extends State<BudowaApp> {
                 },
               ),
               OutlinedButton(onPressed: busy ? null : load, child: const Text('Оновити тестові дані')),
+              OutlinedButton.icon(onPressed: busy ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HoursEntryForm())), icon: const Icon(Icons.edit_note), label: const Text('Новий запис годин — чернетка')),
+
               const Text('Лише читання тестових копій. Запис вимкнено.',
                 style: TextStyle(color: Colors.deepOrange)),
               const SizedBox(height: 8),
