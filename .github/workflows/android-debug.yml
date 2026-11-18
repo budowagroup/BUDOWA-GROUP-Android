@@ -6,7 +6,6 @@ on:
     paths:
       - 'lib/**'
       - 'pubspec.yaml'
-      - '.github/workflows/android-debug.yml'
 permissions:
   contents: read
 jobs:
@@ -28,6 +27,27 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze --no-fatal-infos
+      - name: Restore and verify stable Android debug signing key
+        shell: bash
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+          ANDROID_DEBUG_SHA1: ${{ secrets.ANDROID_DEBUG_SHA1 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" || -z "$ANDROID_DEBUG_SHA1" ]]; then
+            echo "::error::Missing ANDROID_DEBUG_KEYSTORE_BASE64 or ANDROID_DEBUG_SHA1. Stable Android OAuth signing is required."
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          chmod 700 "$HOME/.android"
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          actual="$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android -keypass android | sed -n 's/^[[:space:]]*SHA1: //p' | head -n 1)"
+          if [[ -z "$actual" || "${actual^^}" != "${ANDROID_DEBUG_SHA1^^}" ]]; then
+            echo "::error::Android debug keystore SHA-1 does not match ANDROID_DEBUG_SHA1."
+            exit 1
+          fi
+          echo "Stable Android signing certificate SHA-1 verified (fingerprint withheld)." >> "$GITHUB_STEP_SUMMARY"
       - name: Validate required OAuth and Apps Script configuration
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
@@ -70,12 +90,7 @@ jobs:
           test -s "$APK"
           echo "### APK compilation succeeded (runtime login not verified)" >> "$GITHUB_STEP_SUMMARY"
           echo "- APK size: $(du -h "$APK" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
-          echo "⚠️ CI debug signing is ephemeral. Do not register this SHA-1 as a permanent Android OAuth certificate." >> "$GITHUB_STEP_SUMMARY"
-          if [[ -f "$HOME/.android/debug.keystore" ]]; then
-            keytool -list -v -keystore "$HOME/.android/debug.keystore" -alias androiddebugkey -storepass android -keypass android | grep 'SHA1:' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "SHA-1 not available: debug keystore not found" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "Stable signing keystore was verified before compilation." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
