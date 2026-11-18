@@ -1,0 +1,13 @@
+name: budowa_group
+description: BUDOWA GROUP Android TEST read-only prototype
+publish_to: none
+version: 0.2.0+2
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  google_sign_in: ^6.2.2
+  http: ^1.3.0
+flutter:
+  uses-material-design: true
