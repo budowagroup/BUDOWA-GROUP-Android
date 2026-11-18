@@ -28,8 +28,35 @@ jobs:
         run: flutter pub get
       - name: Analyze
         run: flutter analyze --no-fatal-infos
+      - name: Validate Google configuration
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+        run: |
+          if [ -z "$GOOGLE_WEB_CLIENT_ID" ]; then
+            echo "::error::Missing GitHub Actions secret GOOGLE_WEB_CLIENT_ID"
+            exit 1
+          fi
+          if [ -z "$APPS_SCRIPT_URL" ]; then
+            echo "::error::Missing GitHub Actions secret APPS_SCRIPT_URL"
+            exit 1
+          fi
+          case "$GOOGLE_WEB_CLIENT_ID" in
+            *.apps.googleusercontent.com) ;;
+            *) echo "::error::GOOGLE_WEB_CLIENT_ID is not a Google OAuth web client ID"; exit 1 ;;
+          esac
+          case "$APPS_SCRIPT_URL" in
+            https://script.google.com/macros/s/*/exec) ;;
+            *) echo "::error::APPS_SCRIPT_URL must be a deployed Apps Script web app URL"; exit 1 ;;
+          esac
       - name: Build test-only debug APK
-        run: flutter build apk --debug
+        env:
+          GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+          APPS_SCRIPT_URL: ${{ secrets.APPS_SCRIPT_URL }}
+        run: |
+          flutter build apk --debug \
+            --dart-define="GOOGLE_WEB_CLIENT_ID=$GOOGLE_WEB_CLIENT_ID" \
+            --dart-define="APPS_SCRIPT_URL=$APPS_SCRIPT_URL"
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
