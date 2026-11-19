@@ -36,15 +36,47 @@ class _BudowaAppState extends State<BudowaApp> {
     if (apiUrl.isEmpty) throw Exception('Не задано APPS_SCRIPT_URL');
     final uri = Uri.parse(apiUrl);
     if (uri.scheme != 'https') throw Exception('Потрібен HTTPS');
-    final response = await http.post(uri,
-      headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: jsonEncode({...payload, 'idToken': idToken}),
-    ).timeout(const Duration(seconds: 25));
-    if (response.statusCode != 200) throw Exception('HTTP ${response.statusCode}');
-    final decoded = jsonDecode(response.body);
-    if (decoded is! Map<String, dynamic>) throw Exception('Некоректна відповідь API');
-    if (decoded['ok'] != true) throw Exception('${decoded['error'] ?? 'API_ERROR'}');
-    return decoded;
+    // Apps Script ContentService returns a 302 after POST. Dart does not
+    // automatically follow 302 redirects for POST, so fetch the response
+    // from Google's one-time content URL using GET (without the ID token).
+    final client = http.Client();
+    try {
+      final postRequest = http.Request('POST', uri)
+        ..headers['Content-Type'] = 'text/plain;charset=utf-8'
+        ..body = jsonEncode({...payload, 'idToken': idToken})
+        ..followRedirects = false;
+      var response = await http.Response.fromStream(
+        await client.send(postRequest).timeout(const Duration(seconds: 25)),
+      ).timeout(const Duration(seconds: 25));
+
+      for (var hop = 0; hop < 3 && response.statusCode == 302; hop++) {
+        final location = response.headers['location'];
+        if (location == null) throw Exception('HTTP 302 без Location');
+        final target = uri.resolve(location);
+        if (target.scheme != 'https' ||
+            target.host != 'script.googleusercontent.com') {
+          throw Exception('Небезпечне перенаправлення API');
+        }
+        final getRequest = http.Request('GET', target)
+          ..followRedirects = false;
+        response = await http.Response.fromStream(
+          await client.send(getRequest).timeout(const Duration(seconds: 25)),
+        ).timeout(const Duration(seconds: 25));
+      }
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}');
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw Exception('Некоректна відповідь API');
+      }
+      if (decoded['ok'] != true) {
+        throw Exception('${decoded['error'] ?? 'API_ERROR'}');
+      }
+      return decoded;
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> login() async {
