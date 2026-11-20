@@ -140,8 +140,9 @@ class _BudowaAppState extends State<BudowaApp> {
         child: Text('Баланс за об’єктами',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
       ),
-      for (var i = 5; i < rows.length; i++)
-        if (valueAt(i, 1).isNotEmpty)
+      // Object totals are in B8:F14 (API rows 5..11). Row 7 is a header.
+      for (var i = 5; i < rows.length && i <= 11; i++)
+        if (valueAt(i, 1).isNotEmpty && valueAt(i, 1) != 'Об’єкт')
           Card(color: const Color(0xF5FFFFFF), child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -149,6 +150,28 @@ class _BudowaAppState extends State<BudowaApp> {
               for (final pair in <(String, int)>[
                 ('З/П Загальна', 2), ('Витрати', 3),
                 ('Надходження', 4), ('Баланс', 5)])
+                Padding(padding: const EdgeInsets.only(top: 5),
+                  child: Row(children: [
+                    SizedBox(width: 135, child: Text(pair.$1)),
+                    Expanded(child: SelectableText(valueAt(i, pair.$2))),
+                  ])),
+            ]),
+          )),
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Text('Закупівельники',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ),
+      // The separate buyers table starts at B16:E16 (API row 13).
+      // B=name, C=income, D=expenses, E=balance; never reuse object labels.
+      for (var i = 14; i < rows.length; i++)
+        if (valueAt(i, 1).isNotEmpty && valueAt(i, 1) != 'Закупівельник')
+          Card(color: const Color(0xF5FFFFFF), child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(valueAt(i, 1), style: const TextStyle(fontWeight: FontWeight.bold)),
+              for (final pair in <(String, int)>[
+                ('Надходження', 2), ('Витрати', 3), ('Баланс', 4)])
                 Padding(padding: const EdgeInsets.only(top: 5),
                   child: Row(children: [
                     SizedBox(width: 135, child: Text(pair.$1)),
