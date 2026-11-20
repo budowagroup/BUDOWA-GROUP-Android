@@ -396,7 +396,7 @@ class _BudowaAppState extends State<BudowaApp> {
       // Object totals are in B8:F14 (API rows 5..11). Row 7 is a header.
       for (var i = 5; i < rows.length && i <= 11; i++)
         if (valueAt(i, 1).isNotEmpty && valueAt(i, 1) != 'Об’єкт')
-          Card(color: const Color(0xF5FFFFFF), child: Padding(
+          Card(color: siteColor(valueAt(i, 1)), child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(valueAt(i, 1), style: const TextStyle(fontWeight: FontWeight.bold)),
