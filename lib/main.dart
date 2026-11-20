@@ -1,4 +1,5 @@
 import 'hours_entry_form.dart';
+import 'sheet_record_editor.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -40,6 +41,8 @@ class _BudowaAppState extends State<BudowaApp> {
   String book = 'hours';
   String tab = 'Робочі години';
   List<List<String>> rows = [];
+  List<int> sheetRowNumbers = [];
+  bool canWriteTest = false;
 
   // Labels verified against the TEST sheets' actual header rows.
   List<String> get columnLabels {
@@ -80,6 +83,63 @@ class _BudowaAppState extends State<BudowaApp> {
 
   String cell(List<String> row, int i) =>
       i < row.length ? row[i].trim() : '';
+
+  bool get editableTab =>
+      book == 'hours' ? <String>{
+        'Робочі години', 'Працівники', 'Обʼєкти', 'Історія ставок',
+      }.contains(tab)
+      : <String>{'Операції', 'Закупівельники', 'Довідники'}.contains(tab);
+
+  Future<void> openRecordEditor([List<String>? existing]) async {
+    if (!canWriteTest || !editableTab || busy) return;
+    final selectedBook = book;
+    final selectedTab = tab;
+    int? actualRow;
+    if (existing != null) {
+      final index = rows.indexOf(existing);
+      if (index < 0 || index >= sheetRowNumbers.length) {
+        if (mounted) setState(() => error = 'Не вдалося визначити рядок таблиці');
+        return;
+      }
+      actualRow = sheetRowNumbers[index];
+    }
+    final expected = <String, String>{
+      if (existing != null)
+        for (final f in testFields(selectedBook, selectedTab))
+          'undefined': cell(existing, f.column),
+    };
+    final rowToEdit = actualRow;
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => SheetRecordEditor(
+        book: selectedBook,
+        tab: selectedTab,
+        sheetRow: rowToEdit,
+        original: existing,
+        onSave: (values, requestId) async {
+          final user = account;
+          if (user == null || !canWriteTest) throw Exception('Немає дозволу на запис');
+          final auth = await user.authentication;
+          final currentToken = auth.idToken;
+          if (currentToken == null) throw Exception('Немає дійсного Google ID Token');
+          final payload = <String, dynamic>{
+            'action': rowToEdit == null ? 'create' : 'update',
+            'book': selectedBook, 'tab': selectedTab,
+            'values': values, 'requestId': requestId,
+            if (rowToEdit != null) 'rowNumber': rowToEdit,
+            if (rowToEdit != null) 'expected': expected,
+          };
+          await request(payload, currentToken);
+        },
+      )),
+    );
+    if (result == true && mounted) {
+      await load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Запис збережено в TEST Google Sheets і дані оновлено.')));
+      }
+    }
+  }
 
   Widget infoLine(String label, String value) => Padding(
     padding: const EdgeInsets.only(top: 6),
@@ -150,6 +210,13 @@ class _BudowaAppState extends State<BudowaApp> {
                 fontWeight: FontWeight.bold,
                 color: cell(record,4)=='Витрати'
                   ? const Color(0xFFAD3C32) : const Color(0xFF176B4D)))),
+          if (canWriteTest && editableTab)
+            Align(alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: busy ? null : () => openRecordEditor(record),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Редагувати'),
+              )),
           for (var i=0; i<record.length; i++)
             if (cell(record,i).isNotEmpty &&
                 i != titleColumn &&
@@ -468,7 +535,9 @@ class _BudowaAppState extends State<BudowaApp> {
       if (idToken == null) throw Exception('Google не повернув ID Token. Перевірте OAuth конфігурацію.');
       final result = await request({'action': 'health'}, idToken);
       if (!mounted) return;
-      setState(() { account = signed; token = idToken; role = '${result['role']}'; });
+      final enabled = result['role'] == 'owner' && result['capabilities'] is Map &&
+          (result['capabilities'] as Map)['write'] == true;
+      setState(() { account = signed; token = idToken; role = '${result['role']}'; canWriteTest = enabled; });
       await load();
     } catch (e) {
       await google.signOut();
@@ -497,6 +566,7 @@ class _BudowaAppState extends State<BudowaApp> {
       var startRow = selectedBook == 'finance' && selectedTab == 'Панель'
           ? 3 : selectedTab == 'Розрахунок' ? 5 : 4;
       final parsed = <List<String>>[];
+      final rowNumbers = <int>[];
       var reachedEnd = false;
       for (var page = 0; page < maxPages; page++) {
         if (!mounted || account != currentAccount ||
@@ -518,6 +588,9 @@ class _BudowaAppState extends State<BudowaApp> {
           break;
         }
         parsed.addAll(portion);
+        for (var i = 0; i < portion.length; i++) {
+          rowNumbers.add(startRow + i);
+        }
         if (portion.length < pageSize) {
           reachedEnd = true;
           break;
@@ -530,7 +603,7 @@ class _BudowaAppState extends State<BudowaApp> {
           'потрібне розширення пагінації API.');
       }
       if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
-        setState(() { token = freshToken; rows = parsed; });
+        setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; });
       }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
@@ -540,7 +613,7 @@ class _BudowaAppState extends State<BudowaApp> {
   }
 
   Future<void> logout() async {
-    if (mounted) setState(() { account = null; token = null; role = null; rows = []; error = null; });
+    if (mounted) setState(() { account = null; token = null; role = null; rows = []; sheetRowNumbers = []; canWriteTest = false; error = null; });
     await google.signOut();
   }
 
@@ -652,18 +725,26 @@ class _BudowaAppState extends State<BudowaApp> {
                         if (book == 'hours' || book == 'finance') ...[
                           const SizedBox(width: 8),
                           Expanded(child: OutlinedButton.icon(
-                            onPressed: busy ? null : () =>
-                              Navigator.of(context).push(MaterialPageRoute<void>(
-                                builder: (_) => book == 'finance' ? FinanceTabDraftForm(tab: tab) : tab == 'Робочі години' ? const HoursEntryForm() : HoursTabDraftForm(tab: tab))),
-                            icon: const Icon(Icons.edit_note, size: 18),
-                            label: const Text('Чернетка'),
+                            onPressed: busy ? null : canWriteTest && editableTab
+                              ? () => openRecordEditor()
+                              : () => Navigator.of(context).push(MaterialPageRoute<void>(
+                                  builder: (_) => book == 'finance'
+                                    ? FinanceTabDraftForm(tab: tab)
+                                    : tab == 'Робочі години'
+                                      ? const HoursEntryForm()
+                                      : HoursTabDraftForm(tab: tab))),
+                            icon: Icon(canWriteTest && editableTab
+                              ? Icons.add_circle_outline : Icons.edit_note, size: 18),
+                            label: Text(canWriteTest && editableTab ? 'Додати' : 'Чернетка'),
                           )),
                         ],
                       ]),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 5),
-                        child: Text('TEST • Лише читання. Запис вимкнено.',
-                          style: TextStyle(color: Color(0xFF9A4500), fontSize: 12)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        child: Text(canWriteTest
+                          ? 'TEST • Запис дозволено лише у TEST-копії. Формули захищено.'
+                          : 'TEST • Лише читання. Запис на сервері вимкнено.',
+                          style: const TextStyle(color: Color(0xFF9A4500), fontSize: 12)),
                       ),
                       if (busy) const LinearProgressIndicator(),
                       const SizedBox(height: 4),
