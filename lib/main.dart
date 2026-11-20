@@ -604,7 +604,7 @@ class _BudowaAppState extends State<BudowaApp> {
                           Expanded(child: OutlinedButton.icon(
                             onPressed: busy ? null : () =>
                               Navigator.of(context).push(MaterialPageRoute<void>(
-                                builder: (_) => const HoursEntryForm())),
+                                builder: (_) => tab == 'Робочі години' ? const HoursEntryForm() : HoursTabDraftForm(tab: tab))),
                             icon: const Icon(Icons.edit_note, size: 18),
                             label: const Text('Чернетка'),
                           )),
