@@ -599,12 +599,12 @@ class _BudowaAppState extends State<BudowaApp> {
                           icon: const Icon(Icons.refresh, size: 18),
                           label: const Text('Оновити'),
                         )),
-                        if (book == 'hours') ...[
+                        if (book == 'hours' || book == 'finance') ...[
                           const SizedBox(width: 8),
                           Expanded(child: OutlinedButton.icon(
                             onPressed: busy ? null : () =>
                               Navigator.of(context).push(MaterialPageRoute<void>(
-                                builder: (_) => tab == 'Робочі години' ? const HoursEntryForm() : HoursTabDraftForm(tab: tab))),
+                                builder: (_) => book == 'finance' ? FinanceTabDraftForm(tab: tab) : tab == 'Робочі години' ? const HoursEntryForm() : HoursTabDraftForm(tab: tab))),
                             icon: const Icon(Icons.edit_note, size: 18),
                             label: const Text('Чернетка'),
                           )),
