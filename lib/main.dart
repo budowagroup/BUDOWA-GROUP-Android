@@ -199,55 +199,6 @@ class _BudowaAppState extends State<BudowaApp> {
   }
 
   DateTime? recordDate(String raw) {
-    final value = raw.trim();
-    final dotted = RegExp(r'^(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})
-    final grouped = <String, List<List<String>>>{};
-    for (final record in rows.reversed) {
-      if (!hasVisibleValues(record)) continue;
-      final date = cell(record,0).isEmpty ? 'Без дати' : cell(record,0);
-      grouped.putIfAbsent(date, () => <List<String>>[]).add(record);
-    }
-    DateTime? parseDate(String value) {
-      final parts = value.split('.');
-      if (parts.length != 3) return null;
-      final day = int.tryParse(parts[0]);
-      final month = int.tryParse(parts[1]);
-      final year = int.tryParse(parts[2]);
-      if (day == null || month == null || year == null) return null;
-      final date = DateTime(year,month,day);
-      return date.day==day && date.month==month && date.year==year
-          ? date : null;
-    }
-    final dates = grouped.keys.toList()..sort((a,b) {
-      final da = parseDate(a); final db = parseDate(b);
-      if (da!=null && db!=null) return db.compareTo(da);
-      if (da!=null) return -1;
-      if (db!=null) return 1;
-      return a.compareTo(b);
-    });
-    return ListView.builder(
-      key: const ValueKey('work-hours-by-date'),
-      itemCount: dates.length,
-      itemBuilder: (context,i) {
-        final date = dates[i]; final records = grouped[date]!;
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(padding: const EdgeInsets.fromLTRB(4,12,4,8),
-            child: Row(children: [
-              const Icon(Icons.calendar_today, size: 17,
-                color: Color(0xFF17365B)),
-              const SizedBox(width: 7),
-              Expanded(child: Text(date, style: const TextStyle(
-                fontSize: 17, fontWeight: FontWeight.bold,
-                color: Color(0xFF17365B)))),
-              Text('${records.length} записів'),
-            ])),
-          for (var j=0;j<records.length;j++) dataCard(records[j],j),
-        ]);
-      },
-    );
-  }
-
-  DateTime? recordDate(String raw) {
     final parts = raw.trim().split('.');
     if (parts.length == 3) {
       final d = int.tryParse(parts[0]);
