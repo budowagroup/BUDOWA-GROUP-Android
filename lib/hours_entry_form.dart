@@ -277,7 +277,7 @@ class _HoursTabDraftFormState extends State<HoursTabDraftForm> {
       return 'Вкажіть Так або Ні';
     }
     if (label.startsWith('Діє від')) {
-      final match = RegExp(r'^\d{4}-\d{2}-\d{2}.hasMatch(text);
+      final match = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text);
       final parsed = DateTime.tryParse(text);
       if (!match || parsed == null || parsed.toIso8601String().substring(0, 10) != text) {
         return 'Формат РРРР-ММ-ДД';
