@@ -92,6 +92,17 @@ class _BudowaAppState extends State<BudowaApp> {
     ]),
   );
 
+  Color siteColor(String name) {
+    switch (name.trim().toLowerCase()) {
+      case 'legionowo michał': return const Color(0xFF9FC5E8);
+      case 'lomyanki grzegorz': return const Color(0xFFFF9900);
+      case 'rembertow rafal':
+      case 'stare babice grzegorz':
+      case 'адміністрація': return const Color(0xFFFFF8E0);
+      default: return const Color(0xF5FFFFFF);
+    }
+  }
+
   Widget dataCard(List<String> record, int index) {
     final isHours = book == 'hours';
     final titleColumn = isHours
@@ -109,8 +120,12 @@ class _BudowaAppState extends State<BudowaApp> {
       'Серпень 2026', 'Вересень 2026', 'Жовтень 2026',
       'Листопад 2026', 'Грудень 2026',
     ];
+    final objectName = isSite ? cell(record,0)
+        : isWork ? cell(record,2)
+        : isOperation ? cell(record,7) : '';
     return Card(
-      color: const Color(0xF5FFFFFF),
+      color: objectName.isEmpty ? const Color(0xF5FFFFFF)
+          : siteColor(objectName),
       margin: const EdgeInsets.only(bottom: 9),
       child: Padding(
         padding: const EdgeInsets.all(13),
