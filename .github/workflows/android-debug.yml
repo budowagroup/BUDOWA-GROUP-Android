@@ -25,8 +25,15 @@ jobs:
         run: |
           rm -f test/widget_test.dart
           rm -f analysis_options.yaml
+      - name: Verify supplied brand images
+        run: |
+          test -s assets/images/ic_launcher.png
+          test -s assets/images/splash_screen.webp
+          test -s assets/images/background.webp
       - name: Install dependencies
         run: flutter pub get
+      - name: Generate Android launcher icon
+        run: dart run flutter_launcher_icons
       - name: Analyze
         run: flutter analyze --no-fatal-infos
       - name: Restore and verify stable Android debug signing key
