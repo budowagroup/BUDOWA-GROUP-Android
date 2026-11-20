@@ -366,27 +366,69 @@ function bgWrite_(request,email) {
         throw new Error('MISSING_FORMULA_ROW');
       }
     });
+    // PRE-FLIGHT ALL FIELDS before touching any data cell.
+    // On create, do not overwrite leftovers in an apparently empty key row.
+    var snapshot=[];
+    for (var p=0;p<cfg.editable.length;p++) {
+      var allowedColumn=cfg.editable[p];
+      var existingCell=target.sheet.getRange(row,allowedColumn+1);
+      if (existingCell.getFormula()) throw new Error('FORMULA_CELL_PROTECTED');
+      var existingValue=existingCell.getValue();
+      if (request.action==='create' && existingValue!=='' &&
+          existingValue!==null) {
+        throw new Error('CREATE_TARGET_NOT_EMPTY');
+      }
+      snapshot.push({
+        column:allowedColumn,
+        value:existingValue,
+        format:existingCell.getNumberFormat()
+      });
+    }
     var ledgerRow=audit.getLastRow()+1;
     audit.getRange(ledgerRow,1,1,7).setValues([[
       id,new Date(), 'PENDING', email, request.action,
       target.book + ':' + target.tab, row
     ]]);
-    for (var j=0;j<cfg.editable.length;j++) {
-      var col=cfg.editable[j];
-      var dest=target.sheet.getRange(row,col+1);
-      if (dest.getFormula()) throw new Error('FORMULA_CELL_PROTECTED');
-      dest.setValue(parsed[col]);
-      if (parsed[col] instanceof Date) dest.setNumberFormat('dd.MM.yyyy');
-      if (target.tab==='Робочі години' && (col===3||col===4)) {
-        dest.setNumberFormat('hh:mm');
+    try {
+      for (var j=0;j<cfg.editable.length;j++) {
+        var col=cfg.editable[j];
+        var dest=target.sheet.getRange(row,col+1);
+        dest.setValue(parsed[col]);
+        if (parsed[col] instanceof Date) dest.setNumberFormat('dd.MM.yyyy');
+        if (target.tab==='Робочі години' && (col===3||col===4)) {
+          dest.setNumberFormat('hh:mm');
+        }
       }
+      SpreadsheetApp.flush();
+      var result={ok:true,action:request.action,book:target.book,tab:target.tab,
+        rowNumber:row};
+      audit.getRange(ledgerRow,8).setValue(JSON.stringify(result));
+      audit.getRange(ledgerRow,3).setValue('DONE');
+      return result;
+    } catch (writeError) {
+      // Sheets writes are not database transactions. Make a best-effort
+      // rollback of every editable value and original number format.
+      var rollbackSucceeded=true;
+      try {
+        for (var q=0;q<snapshot.length;q++) {
+          var original=snapshot[q];
+          var cell=target.sheet.getRange(row,original.column+1);
+          cell.setValue(original.value);
+          cell.setNumberFormat(original.format);
+        }
+        SpreadsheetApp.flush();
+      } catch (rollbackError) {
+        rollbackSucceeded=false;
+      }
+      try {
+        audit.getRange(ledgerRow,3).setValue(
+          rollbackSucceeded ? 'ROLLED_BACK' : 'CHECK_MANUALLY');
+      } catch (auditError) {
+        rollbackSucceeded=false;
+      }
+      throw new Error(rollbackSucceeded
+        ? 'WRITE_FAILED_ROLLED_BACK' : 'WRITE_FAILED_REVIEW');
     }
-    SpreadsheetApp.flush();
-    var result={ok:true,action:request.action,book:target.book,tab:target.tab,
-      rowNumber:row};
-    audit.getRange(ledgerRow,8).setValue(JSON.stringify(result));
-    audit.getRange(ledgerRow,3).setValue('DONE');
-    return result;
   } finally {
     lock.releaseLock();
   }
