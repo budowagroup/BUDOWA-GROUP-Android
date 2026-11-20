@@ -475,3 +475,185 @@ class _HoursTabDraftFormState extends State<HoursTabDraftForm> {
     );
   }
 }
+
+
+/// Finance TEST local-only drafts. Calculated dashboard is intentionally read-only.
+class FinanceTabDraftForm extends StatefulWidget {
+  final String tab;
+  const FinanceTabDraftForm({super.key, required this.tab});
+  @override
+  State<FinanceTabDraftForm> createState() => _FinanceTabDraftFormState();
+}
+
+class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
+  final formKey = GlobalKey<FormState>();
+  final Map<String, TextEditingController> controllers = {};
+  final List<Map<String, String>> drafts = [];
+  int? editingIndex;
+
+  List<String> get labels {
+    switch (widget.tab) {
+      case 'Операції':
+        return ['Дата (РРРР-ММ-ДД)', 'Хто', 'Сума', 'Тип операції (Надходження/Витрати)',
+          'Опис', 'Категорія', 'Об’єкт', 'Документ №'];
+      case 'Закупівельники':
+        return ['Ім’я', 'Надходження', 'Витрати', 'Баланс'];
+      case 'Довідники':
+        return ['Категорія', 'Об’єкт'];
+      default:
+        return [];
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final label in labels) {
+      controllers[label] = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  String? validate(String label, String? raw) {
+    final value = (raw ?? '').trim();
+    final optional = ['Опис', 'Категорія', 'Об’єкт', 'Документ №', 'Надходження', 'Витрати', 'Баланс'];
+    if (value.isEmpty && !optional.contains(label)) return 'Обов’язкове поле';
+    if (['Сума', 'Надходження', 'Витрати', 'Баланс'].contains(label) && value.isNotEmpty) {
+      final parsed = double.tryParse(value.replaceAll(' ', '').replaceAll(',', '.'));
+      if (parsed == null || !parsed.isFinite || (label != 'Баланс' && parsed < 0)) {
+        return 'Некоректна сума';
+      }
+    }
+    if (label.startsWith('Дата')) {
+      final match = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value);
+      final parsed = DateTime.tryParse(value);
+      if (!match || parsed == null || parsed.toIso8601String().substring(0, 10) != value) {
+        return 'Формат РРРР-ММ-ДД';
+      }
+    }
+    if (label.startsWith('Тип операції') && !['Надходження', 'Витрати'].contains(value)) {
+      return 'Надходження або Витрати';
+    }
+    return null;
+  }
+
+  void save() {
+    if (!formKey.currentState!.validate()) return;
+    setState(() {
+      final record = {for (final entry in controllers.entries) entry.key: entry.value.text.trim()};
+      if (editingIndex == null) {
+        drafts.add(record);
+      } else {
+        drafts[editingIndex!] = record;
+      }
+      editingIndex = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Чернетку збережено локально. Google Sheets не змінено.')));
+  }
+
+  void edit(int index) {
+    setState(() {
+      editingIndex = index;
+      for (final entry in controllers.entries) {
+        entry.value.text = drafts[index][entry.key] ?? '';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.tab == 'Панель') {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Панель — TEST')),
+        body: const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('Фінансова панель містить формули та підсумки. '
+              'Їх не можна редагувати як звичайні записи. '
+              'Тестові чернетки створюйте у вкладці «Операції». '
+              'Жодні дані Google Sheets не змінюються.'),
+        ),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.tab} — TEST')),
+      body: Form(
+        key: formKey,
+        child: ListView(padding: const EdgeInsets.all(16), children: [
+          const Text('Локальне тестування додавання, редагування та видалення. '
+              'Чернетки зникнуть після закриття екрана. Google Sheets не змінюється.'),
+          if (widget.tab == 'Закупівельники') ...[
+            const SizedBox(height: 8),
+            const Text('Надходження, витрати й баланс у таблиці є підсумковими '
+                'показниками. Поля тут призначені лише для тестування інтерфейсу.'),
+          ],
+          if (widget.tab == 'Довідники') ...[
+            const SizedBox(height: 8),
+            const Text('Категорії та об’єкти — окремі списки. '
+                'Заповніть потрібне поле; друге можна залишити порожнім.'),
+          ],
+          const SizedBox(height: 16),
+          ...labels.map((label) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextFormField(
+              controller: controllers[label],
+              decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+              keyboardType: ['Сума', 'Надходження', 'Витрати', 'Баланс'].contains(label)
+                  ? const TextInputType.numberWithOptions(decimal: true)
+                  : TextInputType.text,
+              validator: (v) => validate(label, v),
+            ),
+          )),
+          FilledButton.icon(
+            onPressed: () {
+              if (widget.tab == 'Довідники' &&
+                  (controllers['Категорія']!.text.trim().isNotEmpty ||
+                   controllers['Об’єкт']!.text.trim().isNotEmpty)) {
+                setState(() {
+                  final record = {for (final entry in controllers.entries) entry.key: entry.value.text.trim()};
+                  if (editingIndex == null) { drafts.add(record); }
+                  else { drafts[editingIndex!] = record; }
+                  editingIndex = null;
+                });
+                return;
+              }
+              save();
+            },
+            icon: const Icon(Icons.save_outlined),
+            label: Text(editingIndex == null ? 'Додати чернетку' : 'Зберегти зміни'),
+          ),
+          const SizedBox(height: 16),
+          Text('Локальні чернетки (${drafts.length})',
+              style: Theme.of(context).textTheme.titleMedium),
+          ...List.generate(drafts.length, (i) {
+            final record = drafts[i];
+            return Card(child: ListTile(
+              title: Text(record.entries.firstWhere(
+                (entry) => entry.value.isNotEmpty,
+                orElse: () => const MapEntry('', 'Чернетка')).value),
+              subtitle: Text(record.entries.skip(1).where((e) => e.value.isNotEmpty)
+                  .map((e) => '${e.key}: ${e.value}').join(' · ')),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(tooltip: 'Редагувати', icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => edit(i)),
+                IconButton(tooltip: 'Видалити', icon: const Icon(Icons.delete_outline),
+                    onPressed: () => setState(() {
+                      drafts.removeAt(i);
+                      if (editingIndex == i) editingIndex = null;
+                      else if (editingIndex != null && editingIndex! > i) editingIndex = editingIndex! - 1;
+                    })),
+              ]),
+            ));
+          }),
+        ]),
+      ),
+    );
+  }
+}
