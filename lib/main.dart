@@ -46,7 +46,7 @@ class _BudowaAppState extends State<BudowaApp> {
       return const ['Дата', 'Працівник', 'Обʼєкт', 'Початок', 'Кінець'];
     }
     if (book == 'finance' && tab == 'Операції') {
-      return const ['Дата', 'Відповідальний', 'Сума', 'Тип операції'];
+      return const ['', 'Дата', 'Відповідальний', 'Сума', 'Тип операції'];
     }
     // Other sheets may have different schemas; never guess their headings.
     return const [];
@@ -54,6 +54,9 @@ class _BudowaAppState extends State<BudowaApp> {
 
   String columnLabel(int index) =>
       index < columnLabels.length ? columnLabels[index] : 'Колонка ${index + 1}';
+
+  bool hasVisibleValues(List<String> record) =>
+      record.any((value) => value.trim().isNotEmpty);
 
   Widget dataCard(List<String> record, int index) {
     return Card(
@@ -68,6 +71,7 @@ class _BudowaAppState extends State<BudowaApp> {
               fontWeight: FontWeight.w700, color: Color(0xFF17365B))),
             const SizedBox(height: 8),
             for (var i = 0; i < record.length; i++)
+              if (record[i].trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 5),
                 child: Row(
@@ -328,7 +332,10 @@ class _BudowaAppState extends State<BudowaApp> {
                           : ListView.builder(
                               key: ValueKey('records-$book-$tab'),
                               itemCount: rows.length,
-                              itemBuilder: (context, i) => dataCard(rows[i], i),
+                              itemBuilder: (context, i) =>
+                                hasVisibleValues(rows[i])
+                                  ? dataCard(rows[i], i)
+                                  : const SizedBox.shrink(),
                             ),
                       ),
                     ],
