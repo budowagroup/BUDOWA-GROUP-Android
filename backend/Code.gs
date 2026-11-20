@@ -194,7 +194,8 @@ function bgValidateRefs_(target,values) {
       target.tab==='Історія ставок')) {
     var employees=target.spreadsheet.getSheetByName('Працівники')
       .getRange('A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
-    if (employees.indexOf(values['1'] || values['0'])<0) {
+    var employeeName=target.tab==='Робочі години' ? values['1'] : values['0'];
+    if (employees.indexOf(employeeName)<0) {
       throw new Error('EMPLOYEE_NOT_FOUND');
     }
   }
@@ -311,6 +312,16 @@ function bgWrite_(request,email) {
         if (typeof expected[key]!=='string' || expected[key]!==current[idx]) {
           throw new Error('EDIT_CONFLICT_REFRESH');
         }
+      }
+    }
+    // Do not silently break references or formula lookups by renaming keys.
+    // Name changes require a separate dependency-aware migration.
+    if (request.action==='update' &&
+        (target.tab==='Працівники' || target.tab==='Обʼєкти' ||
+         target.tab==='Закупівельники' || target.tab==='Довідники')) {
+      var existingName=target.sheet.getRange(row,1).getDisplayValue().trim();
+      if (values['0']!==existingName) {
+        throw new Error('RENAME_REQUIRES_MIGRATION');
       }
     }
     bgValidateUnique_(target,values,row);
