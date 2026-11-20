@@ -28,6 +28,15 @@ class _BudowaAppState extends State<BudowaApp> {
   String? role;
   String? error;
   bool busy = false;
+  bool showLaunchSplash = true;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => showLaunchSplash = false);
+    });
+  }
   String book = 'hours';
   String tab = 'Робочі години';
   List<List<String>> rows = [];
@@ -151,11 +160,30 @@ class _BudowaAppState extends State<BudowaApp> {
       debugShowCheckedModeBanner: false,
       title: 'BUDOWA GROUP',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF17365B)),
-      home: Scaffold(
+      home: showLaunchSplash
+          ? const Scaffold(
+              backgroundColor: Color(0xFF0756A3),
+              body: SizedBox.expand(
+                child: Image(
+                  image: AssetImage('assets/images/splash_screen.webp'),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            )
+          : Scaffold(
         appBar: AppBar(title: const Text('BUDOWA GROUP — TEST'), actions: [
           if (loggedIn) IconButton(onPressed: logout, icon: const Icon(Icons.logout), tooltip: 'Вийти')
         ]),
-        body: Padding(
+        body: Container(
+          decoration: const BoxDecoration(
+            image: DecorationImage(
+              image: AssetImage('assets/images/background.webp'),
+              fit: BoxFit.cover,
+            ),
+          ),
+          child: Container(
+            color: const Color(0xE6FFFFFF),
+            child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             if (!loggedIn) ...[
@@ -210,6 +238,8 @@ class _BudowaAppState extends State<BudowaApp> {
             if (error != null) Padding(padding: const EdgeInsets.only(top: 8),
               child: SelectableText(error!, style: const TextStyle(color: Colors.red))),
           ]),
+        ),
+          ),
         ),
       ),
     );
