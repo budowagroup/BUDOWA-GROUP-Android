@@ -84,7 +84,7 @@ class _BudowaAppState extends State<BudowaApp> {
   Widget infoLine(String label, String value) => Padding(
     padding: const EdgeInsets.only(top: 6),
     child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SizedBox(width: 112, child: Text(label,
+      SizedBox(width: 138, child: Text(label,
         style: const TextStyle(fontSize: 13, color: Color(0xFF51647A)))),
       const SizedBox(width: 6),
       Expanded(child: SelectableText(value,
@@ -130,7 +130,11 @@ class _BudowaAppState extends State<BudowaApp> {
           if (isOperation && cell(record,4).isNotEmpty)
             infoLine('Тип', cell(record,4)),
           if (isOperation && cell(record,3).isNotEmpty)
-            infoLine('Сума', cell(record,3)),
+            Padding(padding: const EdgeInsets.only(top: 6), child: Text(
+              cell(record,3), style: TextStyle(fontSize: 21,
+                fontWeight: FontWeight.bold,
+                color: cell(record,4)=='Витрати'
+                  ? const Color(0xFFAD3C32) : const Color(0xFF176B4D)))),
           for (var i=0; i<record.length; i++)
             if (cell(record,i).isNotEmpty &&
                 i != titleColumn &&
@@ -150,6 +154,33 @@ class _BudowaAppState extends State<BudowaApp> {
         ]),
       ),
     );
+  }
+
+  Widget directoriesView() {
+    final categories = <String>{};
+    final sites = <String>{};
+    for (final record in rows) {
+      if (cell(record,0).isNotEmpty) categories.add(cell(record,0));
+      if (cell(record,1).isNotEmpty) sites.add(cell(record,1));
+    }
+    Widget section(String title, Set<String> values) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(padding: const EdgeInsets.fromLTRB(4,12,4,8),
+          child: Text('$title (${values.length})',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold,
+              color: Color(0xFF17365B)))),
+        for (final value in values)
+          Card(color: const Color(0xF5FFFFFF),
+            margin: const EdgeInsets.only(bottom: 6),
+            child: Padding(padding: const EdgeInsets.symmetric(
+              horizontal: 14, vertical: 12),
+              child: SizedBox(width: double.infinity,
+                child: Text(value, style: const TextStyle(fontSize: 15))))),
+      ]);
+    return ListView(children: [
+      section('Категорії', categories),
+      section('Об’єкти', sites),
+    ]);
   }
 
   Widget workHoursView() {
@@ -212,17 +243,24 @@ class _BudowaAppState extends State<BudowaApp> {
           Text(label, style: const TextStyle(color: Color(0xFF51647A))),
           const SizedBox(height: 5),
           SelectableText(value.isEmpty ? '—' : value,
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold,
               color: value.contains('#REF!') ? Colors.red.shade800 : const Color(0xFF17365B))),
         ]),
       ),
     );
     // API starts from row 3 for this tab; row 3 is rows[0].
     return ListView(children: [
-      metric('Надходження', valueAt(0, 2)),
-      metric('Витрати', valueAt(1, 2)),
-      metric('Баланс', valueAt(2, 2)),
-      metric('З/П працівникам', valueAt(3, 2)),
+      GridView.count(
+        crossAxisCount: 2, shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        childAspectRatio: 1.75,
+        children: [
+          metric('Надходження', valueAt(0, 2)),
+          metric('Витрати', valueAt(1, 2)),
+          metric('Баланс', valueAt(2, 2)),
+          metric('З/П працівникам', valueAt(3, 2)),
+        ],
+      ),
       const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: Text('Баланс за об’єктами',
@@ -512,6 +550,8 @@ class _BudowaAppState extends State<BudowaApp> {
                             ? financeDashboard()
                             : book == 'hours' && tab == 'Робочі години'
                             ? workHoursView()
+                            : book == 'finance' && tab == 'Довідники'
+                            ? directoriesView()
                             : ListView.builder(
                               key: ValueKey('records-$book-$tab'),
                               itemCount: rows.length,
