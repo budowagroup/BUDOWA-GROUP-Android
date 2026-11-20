@@ -98,6 +98,15 @@ jobs:
         run: |
           APK=build/app/outputs/flutter-apk/app-debug.apk
           test -s "$APK"
+          # APK is a ZIP container. Check every entry for corruption before upload.
+          unzip -tqq "$APK"
+          # Verify that Android package metadata and Flutter assets exist.
+          unzip -Z1 "$APK" | grep -Fxq 'AndroidManifest.xml'
+          unzip -Z1 "$APK" | grep -Fxq 'assets/flutter_assets/AssetManifest.bin'
+          unzip -Z1 "$APK" | grep -Fxq 'assets/flutter_assets/assets/images/background.webp'
+          unzip -Z1 "$APK" | grep -Fxq 'assets/flutter_assets/assets/images/splash_screen.webp'
+          sha256sum "$APK" > build/app/outputs/flutter-apk/app-debug.apk.sha256
+          echo "APK archive integrity and bundled Flutter images verified." >> "$GITHUB_STEP_SUMMARY"
           echo "### APK compilation succeeded (runtime login not verified)" >> "$GITHUB_STEP_SUMMARY"
           echo "- APK size: $(du -h "$APK" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
           echo "Stable signing keystore was verified before compilation." >> "$GITHUB_STEP_SUMMARY"
@@ -105,7 +114,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: budowa-group-test-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: |
+            build/app/outputs/flutter-apk/app-debug.apk
+            build/app/outputs/flutter-apk/app-debug.apk.sha256
           if-no-files-found: error
       - name: Report failure
         if: failure()
