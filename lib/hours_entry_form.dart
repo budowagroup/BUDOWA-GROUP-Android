@@ -217,3 +217,162 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
     );
   }
 }
+
+ 
+/// Local-only forms for reference and rate-history tabs.
+/// The calculated payroll tab is derived from source data and remains read-only.
+class HoursTabDraftForm extends StatefulWidget {
+  final String tab;
+  const HoursTabDraftForm({super.key, required this.tab});
+  @override
+  State<HoursTabDraftForm> createState() => _HoursTabDraftFormState();
+}
+
+class _HoursTabDraftFormState extends State<HoursTabDraftForm> {
+  final formKey = GlobalKey<FormState>();
+  final Map<String, TextEditingController> fields = {};
+  final List<Map<String, String>> drafts = [];
+  int? editingIndex;
+
+  List<String> get labels {
+    switch (widget.tab) {
+      case 'Працівники':
+        return ['Працівник', 'Посада', 'Ставка netto/год', 'Активний (Так/Ні)'];
+      case 'Обʼєкти':
+      case 'Об’єкти':
+        return ['Об’єкт', 'Адреса', 'Активний (Так/Ні)'];
+      case 'Історія ставок':
+        return ['Працівник', 'Діє від (РРРР-ММ-ДД)', 'Ставка netto/год', 'Примітка'];
+      default:
+        return [];
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final label in labels) {
+      fields[label] = TextEditingController();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in fields.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  String? validate(String label, String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty && label != 'Адреса' && label != 'Посада' && label != 'Примітка') {
+      return 'Обов’язкове поле';
+    }
+    if (label.contains('Ставка')) {
+      final number = double.tryParse(text.replaceAll(',', '.'));
+      if (number == null || !number.isFinite || number < 0) return 'Вкажіть коректну ставку';
+    }
+    if (label.startsWith('Активний') && !['так', 'ні'].contains(text.toLowerCase())) {
+      return 'Вкажіть Так або Ні';
+    }
+    if (label.startsWith('Діє від')) {
+      final match = RegExp(r'^\\d{4}-\\d{2}-\\d{2}$').hasMatch(text);
+      final parsed = DateTime.tryParse(text);
+      if (!match || parsed == null || parsed.toIso8601String().substring(0, 10) != text) {
+        return 'Формат РРРР-ММ-ДД';
+      }
+    }
+    return null;
+  }
+
+  void save() {
+    if (!formKey.currentState!.validate()) return;
+    setState(() {
+      final data = {for (final entry in fields.entries) entry.key: entry.value.text.trim()};
+      if (editingIndex == null) {
+        drafts.add(data);
+      } else {
+        drafts[editingIndex!] = data;
+      }
+      editingIndex = null;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Локальну чернетку збережено. Google Sheets не змінено.')));
+  }
+
+  void edit(int index) {
+    setState(() {
+      editingIndex = index;
+      for (final entry in fields.entries) {
+        entry.value.text = drafts[index][entry.key] ?? '';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.tab == 'Розрахунок') {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Розрахунок — TEST')),
+        body: const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text('Ця вкладка розраховується формулами Google Sheets. '
+              'Для безпечного тестування змінюйте чернетки у вкладках '
+              '«Робочі години», «Працівники» та «Історія ставок». '
+              'Розрахункові формули не редагуються з застосунку.'),
+        ),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.tab} — TEST')),
+      body: Form(
+        key: formKey,
+        child: ListView(padding: const EdgeInsets.all(16), children: [
+          const Text('Лише локальні чернетки. Запис у Google Sheets вимкнено. '
+              'Чернетки зникають після закриття екрана.'),
+          const SizedBox(height: 16),
+          ...labels.map((label) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextFormField(
+              controller: fields[label],
+              decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+              keyboardType: label.contains('Ставка')
+                  ? const TextInputType.numberWithOptions(decimal: true)
+                  : TextInputType.text,
+              validator: (v) => validate(label, v),
+            ),
+          )),
+          FilledButton.icon(
+            onPressed: save,
+            icon: const Icon(Icons.save_outlined),
+            label: Text(editingIndex == null ? 'Додати локальну чернетку' : 'Зберегти зміни чернетки'),
+          ),
+          const SizedBox(height: 16),
+          Text('Чернетки (${drafts.length})', style: Theme.of(context).textTheme.titleMedium),
+          ...List.generate(drafts.length, (index) {
+            final item = drafts[index];
+            return Card(child: ListTile(
+              title: Text(item[labels.first] ?? ''),
+              subtitle: Text(item.entries.skip(1).map((e) => '${e.key}: ${e.value}').join(' · ')),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(
+                  tooltip: 'Редагувати',
+                  onPressed: () => edit(index),
+                  icon: const Icon(Icons.edit_outlined)),
+                IconButton(
+                  tooltip: 'Видалити',
+                  onPressed: () => setState(() {
+                    drafts.removeAt(index);
+                    if (editingIndex == index) editingIndex = null;
+                    else if (editingIndex != null && editingIndex! > index) editingIndex = editingIndex! - 1;
+                  }),
+                  icon: const Icon(Icons.delete_outline)),
+              ]),
+            ));
+          }),
+        ]),
+      ),
+    );
+  }
+}
