@@ -188,13 +188,14 @@ class _BudowaAppState extends State<BudowaApp> {
                 },
               ),
               OutlinedButton(onPressed: busy ? null : load, child: const Text('Оновити тестові дані')),
-              OutlinedButton.icon(onPressed: busy ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HoursEntryForm())), icon: const Icon(Icons.edit_note), label: const Text('Новий запис годин — чернетка')),
+              if (book == 'hours')
+                OutlinedButton.icon(onPressed: busy ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HoursEntryForm())), icon: const Icon(Icons.edit_note), label: const Text('Новий запис годин — чернетка')),
 
               const Text('Лише читання тестових копій. Запис вимкнено.',
                 style: TextStyle(color: Colors.deepOrange)),
               const SizedBox(height: 8),
               Expanded(child: rows.isEmpty
-                ? const Center(child: Text('Немає рядків для показу'))
+                ? Center(child: Text(busy ? 'Завантаження тестових даних…' : error != null ? 'Не вдалося завантажити дані' : 'Немає рядків для показу'))
                 : SingleChildScrollView(scrollDirection: Axis.horizontal,
                     child: SingleChildScrollView(
                       child: DataTable(columns: [
