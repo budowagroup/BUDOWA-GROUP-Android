@@ -41,14 +41,34 @@ class _BudowaAppState extends State<BudowaApp> {
   String tab = 'Робочі години';
   List<List<String>> rows = [];
 
+  // Labels verified against the TEST sheets' actual header rows.
   List<String> get columnLabels {
-    if (book == 'hours' && tab == 'Робочі години') {
-      return const ['Дата', 'Працівник', 'Обʼєкт', 'Початок', 'Кінець'];
+    if (book == 'hours') {
+      switch (tab) {
+        case 'Робочі години':
+          return const ['Дата', 'Працівник', 'Об’єкт', 'З', 'ДО', 'Перерва', 'Час', 'Ставка', 'Сума', 'Аванс', 'Місяць', 'Оплата', 'Місяць', 'Залишок', 'Примітка'];
+        case 'Працівники':
+          return const ['Працівник', 'Посада', 'Ставка netto/год', 'Активний', 'Примітка', 'Активні працівники'];
+        case 'Обʼєкти':
+          return const ['Об’єкт', 'Адреса', 'Активний', 'Примітка', 'Активні об’єкти'];
+        case 'Історія ставок':
+          return const ['Працівник', 'Діє від', 'Ставка netto/год', 'Примітка'];
+        case 'Розрахунок':
+          return const ['Працівник', 'Дні', 'Години', 'Нараховано', 'Аванс', 'Виплачено', 'До виплати',
+            'Дні', 'Години', 'Нараховано', 'Аванс', 'Виплачено', 'До виплати',
+            'Дні', 'Години', 'Нараховано', 'Аванс', 'Виплачено', 'До виплати',
+            'Дні', 'Години', 'Нараховано', 'Аванс', 'Виплачено', 'До виплати',
+            'Дні', 'Години', 'Нараховано', 'Аванс', 'Виплачено', 'До виплати'];
+      }
     }
-    if (book == 'finance' && tab == 'Операції') {
-      return const ['', 'Дата', 'Відповідальний', 'Сума', 'Тип операції'];
+    switch (tab) {
+      case 'Операції':
+        return const ['', 'Дата', 'Хто', 'Сума', 'Тип операції', 'Опис', 'Категорія', 'Об’єкт', 'Документ №'];
+      case 'Закупівельники':
+        return const ['Ім’я', 'Надходження', 'Витрати', 'Баланс'];
+      case 'Довідники':
+        return const ['Категорії', 'Об’єкти'];
     }
-    // Other sheets may have different schemas; never guess their headings.
     return const [];
   }
 
@@ -89,6 +109,54 @@ class _BudowaAppState extends State<BudowaApp> {
         ),
       ),
     );
+  }
+
+  Widget financeDashboard() {
+    // Panel is a report layout, not a row-based transaction table.
+    // Preserve spreadsheet errors visibly rather than replacing them with zero.
+    String valueAt(int row, int col) =>
+        row < rows.length && col < rows[row].length ? rows[row][col] : '';
+    Widget metric(String label, String value) => Card(
+      color: const Color(0xF5FFFFFF),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: const TextStyle(color: Color(0xFF51647A))),
+          const SizedBox(height: 5),
+          SelectableText(value.isEmpty ? '—' : value,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold,
+              color: value.contains('#REF!') ? Colors.red.shade800 : const Color(0xFF17365B))),
+        ]),
+      ),
+    );
+    // API starts from row 3 for this tab; row 3 is rows[0].
+    return ListView(children: [
+      metric('Надходження', valueAt(0, 2)),
+      metric('Витрати', valueAt(1, 2)),
+      metric('Баланс', valueAt(2, 2)),
+      metric('З/П працівникам', valueAt(3, 2)),
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Text('Баланс за об’єктами',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+      ),
+      for (var i = 5; i < rows.length; i++)
+        if (valueAt(i, 1).isNotEmpty)
+          Card(color: const Color(0xF5FFFFFF), child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(valueAt(i, 1), style: const TextStyle(fontWeight: FontWeight.bold)),
+              for (final pair in <(String, int)>[
+                ('З/П Загальна', 2), ('Витрати', 3),
+                ('Надходження', 4), ('Баланс', 5)])
+                Padding(padding: const EdgeInsets.only(top: 5),
+                  child: Row(children: [
+                    SizedBox(width: 135, child: Text(pair.$1)),
+                    Expanded(child: SelectableText(valueAt(i, pair.$2))),
+                  ])),
+            ]),
+          )),
+    ]);
   }
 
   Future<Map<String, dynamic>> request(Map<String, dynamic> payload, String idToken) async {
@@ -177,7 +245,7 @@ class _BudowaAppState extends State<BudowaApp> {
       final currentAuth = await currentAccount.authentication;
       final freshToken = currentAuth.idToken;
       if (freshToken == null) throw Exception('Не вдалося оновити Google ID Token. Увійдіть повторно.');
-      final result = await request({'action': 'read', 'book': selectedBook, 'tab': selectedTab, 'start': 4, 'limit': 30}, freshToken);
+      final result = await request({'action': 'read', 'book': selectedBook, 'tab': selectedTab, 'start': selectedBook == 'finance' && selectedTab == 'Панель' ? 3 : selectedTab == 'Розрахунок' ? 5 : 4, 'limit': 30}, freshToken);
       final raw = result['rows'];
       if (raw is! List || raw.any((row) => row is! List)) {
         throw const FormatException('Некоректний формат рядків API');
@@ -329,7 +397,9 @@ class _BudowaAppState extends State<BudowaApp> {
                               : error != null
                                 ? 'Не вдалося завантажити дані'
                                 : 'Немає рядків для показу'))
-                          : ListView.builder(
+                          : book == 'finance' && tab == 'Панель'
+                            ? financeDashboard()
+                            : ListView.builder(
                               key: ValueKey('records-$book-$tab'),
                               itemCount: rows.length,
                               itemBuilder: (context, i) =>
