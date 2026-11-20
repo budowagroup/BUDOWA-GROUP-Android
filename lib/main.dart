@@ -227,6 +227,24 @@ class _BudowaAppState extends State<BudowaApp> {
     return indexed.map((entry)=>entry.value).toList();
   }
 
+  Widget operationsView() {
+    final ordered = newestFirst(rows, 1).where(hasVisibleValues).toList();
+    return ListView.builder(
+      key: const ValueKey('operations-newest-first'),
+      itemCount: ordered.length,
+      itemBuilder: (context, index) => dataCard(ordered[index], index),
+    );
+  }
+
+  Widget rateHistoryView() {
+    final ordered = newestFirst(rows, 1).where(hasVisibleValues).toList();
+    return ListView.builder(
+      key: const ValueKey('rates-newest-first'),
+      itemCount: ordered.length,
+      itemBuilder: (context, index) => dataCard(ordered[index], index),
+    );
+  }
+
   Widget workHoursView() {
     final grouped = <String, List<List<String>>>{};
     for (final record in rows.reversed) {
@@ -472,13 +490,45 @@ class _BudowaAppState extends State<BudowaApp> {
       final currentAuth = await currentAccount.authentication;
       final freshToken = currentAuth.idToken;
       if (freshToken == null) throw Exception('Не вдалося оновити Google ID Token. Увійдіть повторно.');
-      final result = await request({'action': 'read', 'book': selectedBook, 'tab': selectedTab, 'start': selectedBook == 'finance' && selectedTab == 'Панель' ? 3 : selectedTab == 'Розрахунок' ? 5 : 4, 'limit': 30}, freshToken);
-      final raw = result['rows'];
-      if (raw is! List || raw.any((row) => row is! List)) {
-        throw const FormatException('Некоректний формат рядків API');
+      // Load every available page before sorting; the first 30 rows
+      // otherwise hide newer payroll and financial transactions.
+      const pageSize = 30;
+      const maxPages = 200; // Limit total scan to 6000 rows.
+      var startRow = selectedBook == 'finance' && selectedTab == 'Панель'
+          ? 3 : selectedTab == 'Розрахунок' ? 5 : 4;
+      final parsed = <List<String>>[];
+      var reachedEnd = false;
+      for (var page = 0; page < maxPages; page++) {
+        if (!mounted || account != currentAccount ||
+            book != selectedBook || tab != selectedTab) return;
+        final result = await request({
+          'action': 'read', 'book': selectedBook, 'tab': selectedTab,
+          'start': startRow, 'limit': pageSize,
+        }, freshToken);
+        final raw = result['rows'];
+        if (raw is! List || raw.any((row) => row is! List)) {
+          throw const FormatException('Некоректний формат рядків API');
+        }
+        final portion = raw.map<List<String>>((row) =>
+          (row as List).map<String>((value) =>
+            value == null ? '' : '$value').toList()).toList();
+        if (portion.isEmpty || portion.every((record) =>
+            record.every((value) => value.trim().isEmpty))) {
+          reachedEnd = true;
+          break;
+        }
+        parsed.addAll(portion);
+        if (portion.length < pageSize) {
+          reachedEnd = true;
+          break;
+        }
+        startRow += portion.length;
       }
-      final parsed = raw.map<List<String>>((row) =>
-          (row as List).map<String>((cell) => '$cell').toList()).toList();
+      if (!reachedEnd) {
+        throw const FormatException(
+          'Досягнуто межі 6000 рядків. Завантаження неповне — '
+          'потрібне розширення пагінації API.');
+      }
       if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
         setState(() { token = freshToken; rows = parsed; });
       }
@@ -633,28 +683,16 @@ class _BudowaAppState extends State<BudowaApp> {
                             : book == 'finance' && tab == 'Довідники'
                             ? directoriesView()
                             : book == 'finance' && tab == 'Операції'
-                            ? ListView(children: [
-                                for (final record in newestFirst(rows,1))
-                                  if (hasVisibleValues(record)) dataCard(record,0),
-                              ])
-                            : book == 'finance' && tab == 'Операції'
-                            ? ListView(
-                                key: const ValueKey('operations-newest-first'),
-                                children: [
-                                  for (final record in newestFirst(rows, 1))
-                                    if (hasVisibleValues(record)) dataCard(record, 0),
-                                ],
-                              )
+                            ? operationsView()
+                            : book == 'hours' && tab == 'Історія ставок'
+                            ? rateHistoryView()
                             : ListView.builder(
                               key: ValueKey('records-$book-$tab'),
                               itemCount: rows.length,
-                              itemBuilder: (context, i) {
-                                final ordered = book == 'hours' && tab == 'Історія ставок'
-                                    ? newestFirst(rows, 1) : rows;
-                                return hasVisibleValues(ordered[i])
-                                    ? dataCard(ordered[i], i)
-                                    : const SizedBox.shrink();
-                              },
+                              itemBuilder: (context, i) =>
+                                  hasVisibleValues(rows[i])
+                                      ? dataCard(rows[i], i)
+                                      : const SizedBox.shrink(),
                             ),
                       ),
                     ],
