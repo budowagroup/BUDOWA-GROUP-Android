@@ -18,6 +18,9 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
   TimeOfDay? end;
   int breakMinutes = 0;
   bool preview = false;
+  final List<Map<String, String>> drafts = [];
+  int? editingIndex;
+
 
   @override
   void dispose() {
@@ -42,6 +45,58 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
     if (chosen != null) setState(() { if (isStart) { start = chosen; } else { end = chosen; } preview = false; });
   }
 
+  void saveLocalDraft() {
+    final formValid = key.currentState!.validate();
+    final validTime = start != null && end != null &&
+        minutes(end!) > minutes(start!) + breakMinutes;
+    if (!formValid || !validTime) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Перевірте обов’язкові поля, час і перерву')));
+      return;
+    }
+    final data = <String, String>{
+      'employee': employee.text.trim(),
+      'object': object.text.trim(),
+      'date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+      'start': display(start),
+      'end': display(end),
+      'break': breakMinutes.toString(),
+      'hours': ((minutes(end!) - minutes(start!) - breakMinutes) / 60).toStringAsFixed(2),
+      'advance': advance.text.trim().replaceAll(',', '.'),
+      'note': note.text.trim(),
+    };
+    setState(() {
+      if (editingIndex == null) {
+        drafts.add(data);
+      } else {
+        drafts[editingIndex!] = data;
+      }
+      editingIndex = null;
+      preview = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Чернетку збережено лише в пам’яті застосунку. Google Sheets не змінено.')));
+  }
+
+  void editLocalDraft(int index) {
+    final data = drafts[index];
+    final parts = data['date']!.split('-').map(int.parse).toList();
+    final startParts = data['start']!.split(':').map(int.parse).toList();
+    final endParts = data['end']!.split(':').map(int.parse).toList();
+    setState(() {
+      editingIndex = index;
+      employee.text = data['employee']!;
+      object.text = data['object']!;
+      date = DateTime(parts[0], parts[1], parts[2]);
+      start = TimeOfDay(hour: startParts[0], minute: startParts[1]);
+      end = TimeOfDay(hour: endParts[0], minute: endParts[1]);
+      breakMinutes = int.parse(data['break']!);
+      advance.text = data['advance']!;
+      note.text = data['note']!;
+      preview = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final validTime = start != null && end != null &&
@@ -52,7 +107,7 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
       body: Form(
         key: key,
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          const Text('Чернетка для вкладки «Робочі години». Запис у таблицю ще вимкнено.'),
+          const Text('TEST: створення та редагування локальних чернеток. Дані зникнуть після закриття екрана. Запис у Google Sheets вимкнено.'),
           const SizedBox(height: 16),
           TextFormField(controller: employee, decoration: const InputDecoration(
             labelText: 'Працівник', border: OutlineInputBorder()),
@@ -106,6 +161,43 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
               setState(() => preview = formValid && validTime);
             },
           ),
+          if (preview) ...[
+            const SizedBox(height: 8),
+            FilledButton.icon(
+              icon: const Icon(Icons.save_outlined),
+              label: Text(editingIndex == null ? 'Зберегти локальну чернетку' : 'Оновити локальну чернетку'),
+              onPressed: saveLocalDraft,
+            ),
+          ],
+          if (drafts.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('Локальні чернетки (${drafts.length})',
+                style: Theme.of(context).textTheme.titleMedium),
+            const Text('Лише поточний екран — у таблицях записів немає.'),
+            ...List.generate(drafts.length, (i) {
+              final item = drafts[i];
+              return Card(child: ListTile(
+                title: Text('${item['employee']} — ${item['object']}'),
+                subtitle: Text('${item['date']} · ${item['start']}–${item['end']} · ${item['hours']} год'),
+                trailing: Wrap(mainAxisSize: MainAxisSize.min, children: [
+                  IconButton(
+                    tooltip: 'Редагувати чернетку',
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => editLocalDraft(i),
+                  ),
+                  IconButton(
+                    tooltip: 'Видалити чернетку',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => setState(() {
+                      drafts.removeAt(i);
+                      if (editingIndex == i) editingIndex = null;
+                      else if (editingIndex != null && editingIndex! > i) editingIndex = editingIndex! - 1;
+                    }),
+                  ),
+                ]),
+              ));
+            }),
+          ],
           if (preview) Card(child: Padding(padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('Перевірена чернетка', style: TextStyle(fontWeight: FontWeight.bold)),
