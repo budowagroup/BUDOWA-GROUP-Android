@@ -214,6 +214,11 @@ function bgValidateRefs_(target,values) {
     var buyers=target.spreadsheet.getSheetByName('Закупівельники')
       .getRange('A4:A200').getDisplayValues().map(function(r){return r[0].trim();});
     if (buyers.indexOf(values['2'])<0) throw new Error('BUYER_NOT_FOUND');
+    if (values['7']) {
+      var projects=target.spreadsheet.getSheetByName('Довідники')
+        .getRange('B4:B101').getDisplayValues().map(function(r){return r[0].trim();});
+      if (projects.indexOf(values['7'])<0) throw new Error('PROJECT_NOT_FOUND');
+    }
     if (values['6']) {
       var cats=target.spreadsheet.getSheetByName('Довідники')
         .getRange('A4:A101').getDisplayValues().map(function(r){return r[0].trim();});
