@@ -6,6 +6,7 @@ on:
     paths:
       - 'lib/**'
       - 'pubspec.yaml'
+      - 'assets/images/**'
       - '.github/workflows/android-debug.yml'
 permissions:
   contents: read
