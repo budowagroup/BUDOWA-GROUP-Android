@@ -179,7 +179,7 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
               return Card(child: ListTile(
                 title: Text('${item['employee']} — ${item['object']}'),
                 subtitle: Text('${item['date']} · ${item['start']}–${item['end']} · ${item['hours']} год'),
-                trailing: Wrap(mainAxisSize: MainAxisSize.min, children: [
+                trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                   IconButton(
                     tooltip: 'Редагувати чернетку',
                     icon: const Icon(Icons.edit_outlined),
