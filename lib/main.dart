@@ -94,11 +94,11 @@ class _BudowaAppState extends State<BudowaApp> {
 
   Color siteColor(String name) {
     switch (name.trim().toLowerCase()) {
-      case 'legionowo michał': return const Color(0xFF9FC5E8);
-      case 'lomyanki grzegorz': return const Color(0xFFFF9900);
-      case 'rembertow rafal':
-      case 'stare babice grzegorz':
-      case 'адміністрація': return const Color(0xFFFFF8E0);
+      case 'legionowo michał': return const Color(0xFFE8F6E8);
+      case 'lomyanki grzegorz': return const Color(0xFF9FC5E8);
+      case 'rembertow rafal': return const Color(0xFFFF9900);
+      case 'stare babice grzegorz': return const Color(0xFFE8EAF0);
+      case 'адміністрація': return const Color(0xFF00FF00);
       default: return const Color(0xF5FFFFFF);
     }
   }
@@ -648,10 +648,13 @@ class _BudowaAppState extends State<BudowaApp> {
                             : ListView.builder(
                               key: ValueKey('records-$book-$tab'),
                               itemCount: rows.length,
-                              itemBuilder: (context, i) =>
-                                hasVisibleValues(rows[i])
-                                  ? dataCard(rows[i], i)
-                                  : const SizedBox.shrink(),
+                              itemBuilder: (context, i) {
+                                final ordered = book == 'hours' && tab == 'Історія ставок'
+                                    ? newestFirst(rows, 1) : rows;
+                                return hasVisibleValues(ordered[i])
+                                    ? dataCard(ordered[i], i)
+                                    : const SizedBox.shrink();
+                              },
                             ),
                       ),
                     ],
