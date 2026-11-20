@@ -46,9 +46,9 @@ function doPost(e) {
     var request = JSON.parse(body);
     if (!request || typeof request !== 'object') throw new Error('INVALID_REQUEST');
     var user = bgVerify_(request.idToken);
-    var role = user.email.toLowerCase() === BG_TEST.owner ? 'owner' : 'viewer';
-    if (role !== 'owner') throw new Error('FORBIDDEN');
-    var enabled = PropertiesService.getScriptProperties()
+    var role = bgRole_(user.email);
+    if (role === 'none') throw new Error('FORBIDDEN');
+    var enabled = role === 'owner' && PropertiesService.getScriptProperties()
       .getProperty('ENABLE_TEST_WRITES') === 'true';
     if (request.action === 'health') {
       return bgOutput_({ok:true,role:role,version:'0.5',
@@ -61,6 +61,7 @@ function doPost(e) {
       return bgOutput_({ok:true,entries:bgHistory_(request)});
     }
     if (request.action === 'create' || request.action === 'update') {
+      if (role !== 'owner') throw new Error('FORBIDDEN');
       if (!enabled) throw new Error('TEST_WRITES_DISABLED');
       return bgOutput_(bgWrite_(request,user.email.toLowerCase()));
     }
@@ -71,6 +72,19 @@ function doPost(e) {
     if (!/^[A-Z0-9_]+$/.test(msg)) msg = 'API_ERROR';
     return bgOutput_({ok:false,error:msg});
   }
+}
+/**
+ * Preserve read-only administrators from v0.4 without publishing their emails.
+ * Copy the original BG.admins list into Script Property READ_ONLY_ADMINS
+ * as a comma-separated list BEFORE deploying this replacement.
+ */
+function bgRole_(email) {
+  var normalized=String(email || '').trim().toLowerCase();
+  if (normalized === BG_TEST.owner) return 'owner';
+  var list=PropertiesService.getScriptProperties()
+    .getProperty('READ_ONLY_ADMINS') || '';
+  var admins=list.split(',').map(function(x){return x.trim().toLowerCase();});
+  return admins.indexOf(normalized)>=0 ? 'admin' : 'none';
 }
 function bgVerify_(token) {
   if (typeof token !== 'string' || token.length < 100 || token.length > 6000) {
@@ -330,6 +344,23 @@ function bgWrite_(request,email) {
       }
     }
     bgValidateUnique_(target,values,row);
+    if (target.tab==='Історія ставок') {
+      var name=values['0'].trim();
+      var effectiveDate=values['1'];
+      var existingRates=target.sheet.getRange(
+        cfg.start,1,target.sheet.getMaxRows()-cfg.start+1,2
+      ).getValues();
+      for (var k=0;k<existingRates.length;k++) {
+        if (cfg.start+k===row) continue;
+        var priorName=String(existingRates[k][0] || '').trim();
+        var priorDate=existingRates[k][1];
+        if (priorName!==name || !(priorDate instanceof Date)) continue;
+        var priorIso=Utilities.formatDate(
+          priorDate,target.spreadsheet.getSpreadsheetTimeZone(),'yyyy-MM-dd');
+        if (priorIso===effectiveDate) throw new Error('DUPLICATE_RATE_DATE');
+      }
+    }
+
     (cfg.formulas||[]).forEach(function(column){
       if (!target.sheet.getRange(row,column+1).getFormula()) {
         throw new Error('MISSING_FORMULA_ROW');
