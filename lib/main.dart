@@ -41,6 +41,52 @@ class _BudowaAppState extends State<BudowaApp> {
   String tab = 'Робочі години';
   List<List<String>> rows = [];
 
+  List<String> get columnLabels {
+    if (book == 'hours' && tab == 'Робочі години') {
+      return const ['Дата', 'Працівник', 'Обʼєкт', 'Початок', 'Кінець'];
+    }
+    if (book == 'finance' && tab == 'Операції') {
+      return const ['Дата', 'Відповідальний', 'Сума', 'Тип операції'];
+    }
+    // Other sheets may have different schemas; never guess their headings.
+    return const [];
+  }
+
+  String columnLabel(int index) =>
+      index < columnLabels.length ? columnLabels[index] : 'Колонка ${index + 1}';
+
+  Widget dataCard(List<String> record, int index) {
+    return Card(
+      color: const Color(0xF0FFFFFF),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Запис ${index + 1}', style: const TextStyle(
+              fontWeight: FontWeight.w700, color: Color(0xFF17365B))),
+            const SizedBox(height: 8),
+            for (var i = 0; i < record.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: 116, child: Text(columnLabel(i),
+                      style: const TextStyle(fontSize: 13, color: Color(0xFF51647A)))),
+                    const SizedBox(width: 8),
+                    Expanded(child: SelectableText(record[i],
+                      style: const TextStyle(fontSize: 15))),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<Map<String, dynamic>> request(Map<String, dynamic> payload, String idToken) async {
     if (apiUrl.isEmpty) throw Exception('Не задано APPS_SCRIPT_URL');
     final uri = Uri.parse(apiUrl);
@@ -155,7 +201,6 @@ class _BudowaAppState extends State<BudowaApp> {
     final tabs = book == 'hours'
       ? const ['Робочі години', 'Розрахунок', 'Працівники', 'Обʼєкти', 'Історія ставок']
       : const ['Операції', 'Панель', 'Закупівельники', 'Довідники'];
-    final columns = rows.fold<int>(0, (m, r) => r.length > m ? r.length : m);
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'BUDOWA GROUP',
@@ -182,63 +227,121 @@ class _BudowaAppState extends State<BudowaApp> {
             ),
           ),
           child: Container(
-            color: const Color(0xE6FFFFFF),
-            child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            if (!loggedIn) ...[
-              const Text('Тестовий режим. Доступ визначає сервер після перевірки Google ID token.'),
-              const SizedBox(height: 16),
-              FilledButton.icon(onPressed: busy ? null : login,
-                icon: const Icon(Icons.login), label: const Text('Увійти через Google')),
-            ] else ...[
-              Text('${account!.email} • $role', style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              DropdownButton<String>(
-                value: book, isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'hours', child: Text('Облік робочих годин')),
-                  DropdownMenuItem(value: 'finance', child: Text('Баланс і закупівлі')),
-                ],
-                onChanged: busy ? null : (v) {
-                  if (v == null) return;
-                  setState(() { book = v; tab = v == 'hours' ? 'Робочі години' : 'Операції'; rows = []; });
-                  load();
-                },
+            color: const Color(0xD9FFFFFF),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!loggedIn) ...[
+                      const Text('Тестовий режим. Доступ визначає сервер після перевірки Google ID token.'),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: busy ? null : login,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Увійти через Google'),
+                      ),
+                    ] else ...[
+                      Text(account!.email, maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                      Text('Роль: $role', style: const TextStyle(fontSize: 12)),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('book-$book'),
+                        initialValue: book,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Розділ',
+                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.white,
+                          isDense: true,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'hours', child: Text('Облік робочих годин')),
+                          DropdownMenuItem(value: 'finance', child: Text('Баланс і закупівлі')),
+                        ],
+                        onChanged: busy ? null : (v) {
+                          if (v == null || v == book) return;
+                          setState(() {
+                            book = v;
+                            tab = v == 'hours' ? 'Робочі години' : 'Операції';
+                            rows = [];
+                          });
+                          load();
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('tab-$book-$tab'),
+                        initialValue: tab,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Таблиця',
+                          border: OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.white,
+                          isDense: true,
+                        ),
+                        items: tabs.map((t) =>
+                          DropdownMenuItem(value: t, child: Text(t))).toList(),
+                        onChanged: busy ? null : (v) {
+                          if (v == null || v == tab) return;
+                          setState(() { tab = v; rows = []; });
+                          load();
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Row(children: [
+                        Expanded(child: OutlinedButton.icon(
+                          onPressed: busy ? null : load,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Оновити'),
+                        )),
+                        if (book == 'hours') ...[
+                          const SizedBox(width: 8),
+                          Expanded(child: OutlinedButton.icon(
+                            onPressed: busy ? null : () =>
+                              Navigator.of(context).push(MaterialPageRoute<void>(
+                                builder: (_) => const HoursEntryForm())),
+                            icon: const Icon(Icons.edit_note, size: 18),
+                            label: const Text('Чернетка'),
+                          )),
+                        ],
+                      ]),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 5),
+                        child: Text('TEST • Лише читання. Запис вимкнено.',
+                          style: TextStyle(color: Color(0xFF9A4500), fontSize: 12)),
+                      ),
+                      if (busy) const LinearProgressIndicator(),
+                      const SizedBox(height: 4),
+                      Expanded(
+                        child: rows.isEmpty
+                          ? Center(child: Text(busy
+                              ? 'Завантаження тестових даних…'
+                              : error != null
+                                ? 'Не вдалося завантажити дані'
+                                : 'Немає рядків для показу'))
+                          : ListView.builder(
+                              key: ValueKey('records-$book-$tab'),
+                              itemCount: rows.length,
+                              itemBuilder: (context, i) => dataCard(rows[i], i),
+                            ),
+                      ),
+                    ],
+                    if (error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: SelectableText(error!,
+                          style: const TextStyle(color: Colors.red)),
+                      ),
+                  ],
+                ),
               ),
-              DropdownButton<String>(
-                value: tab, isExpanded: true,
-                items: tabs.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                onChanged: busy ? null : (v) {
-                  if (v == null) return;
-                  setState(() { tab = v; rows = []; });
-                  load();
-                },
-              ),
-              OutlinedButton(onPressed: busy ? null : load, child: const Text('Оновити тестові дані')),
-              if (book == 'hours')
-                OutlinedButton.icon(onPressed: busy ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const HoursEntryForm())), icon: const Icon(Icons.edit_note), label: const Text('Новий запис годин — чернетка')),
-
-              const Text('Лише читання тестових копій. Запис вимкнено.',
-                style: TextStyle(color: Colors.deepOrange)),
-              const SizedBox(height: 8),
-              Expanded(child: rows.isEmpty
-                ? Center(child: Text(busy ? 'Завантаження тестових даних…' : error != null ? 'Не вдалося завантажити дані' : 'Немає рядків для показу'))
-                : SingleChildScrollView(scrollDirection: Axis.horizontal,
-                    child: SingleChildScrollView(
-                      child: DataTable(columns: [
-                        for (var i = 0; i < columns; i++) DataColumn(label: Text('${i + 1}'))
-                      ], rows: rows.map((r) => DataRow(cells: [
-                        for (var i = 0; i < columns; i++)
-                          DataCell(Text(i < r.length ? r[i] : ''))
-                      ])).toList()),
-                    ))),
-            ],
-            if (busy) const LinearProgressIndicator(),
-            if (error != null) Padding(padding: const EdgeInsets.only(top: 8),
-              child: SelectableText(error!, style: const TextStyle(color: Colors.red))),
-          ]),
-        ),
+            ),
           ),
         ),
       ),
