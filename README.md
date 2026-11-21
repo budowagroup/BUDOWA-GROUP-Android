@@ -1,15 +1,34 @@
-# BUDOWA GROUP Android — TEST v0.2
+# BUDOWA GROUP — TEST Android
 
-Flutter prototype for Google Sign-In and read-only access to **TEST copies only** of the company's hours/payroll and finance spreadsheets, through a separately deployed Google Apps Script API.
+Flutter Android application for **TEST copies** of two company Google Sheets: work hours/payroll and finance/purchasing. This repository is **not a production accounting app**.
 
-**Not production ready.** No data editing, owner/admin management, protected audit log or verified end-to-end login yet.
+## Current working status (audit 21 November 2026)
 
-## Build
+- Google Sign-In and owner read-only navigation were demonstrated on an Android tablet.
+- Nine tab views (five for work hours/payroll, four for finance) are implemented, including date/month sorting, dashboard, employee/site cards and project colors.
+- Create/edit forms and the Apps Script **v0.5 source code** exist in this repository. **The deployed Apps Script verified on the tablet was v0.4/read-only**. A successful APK build does not activate writes.
+- Write operations in TEST sheets have **not been verified end-to-end**. Do not enable `ENABLE_TEST_WRITES=true` until all P0 blockers and staged checks are complete.
+- Server code does not accept arbitrary spreadsheet IDs and is explicitly restricted to the two TEST copies.
+- Original Google Sheets and all scheduled backups are out of scope for all development changes.
 
-GitHub Actions workflow: [Android debug APK](.github/workflows/android-debug.yml). It generates Android platform files, runs Flutter analysis, builds a debug APK and uploads it as an artifact. Build success must be confirmed in Actions.
+## Project control center
 
-The CI workflow **fails before building** unless repository Actions secrets `APPS_SCRIPT_URL` and `GOOGLE_WEB_CLIENT_ID` are configured with valid-looking values. Passing this gate verifies only presence and format, **not** that OAuth, Apps Script, or sign-in actually works. For a local build, pass the same values via `--dart-define`. Android Google OAuth requires an Android client registered for `group.budowa.budowa_group` and the SHA-1 of the **actual stable signing certificate**; ephemeral CI debug signing must not be registered as a permanent credential. Never publish tokens or private signing keys.
+- **[Full 21.11.2026 audit](docs/AUDIT_2026-11-21.md)** — authoritative requirements, findings, evidence and safety rules.
+- **[Work process and gates](docs/WORKFLOW.md)** — one issue at a time, CI, staged deployment and acceptance.
+- **[Current status](docs/STATUS.md)** — what is confirmed, in progress and blocked.
+- **[Prioritized GitHub Issues](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues)** — P0/P1/P2 task board.
+- **[TEST server deployment playbook](backend/DEPLOY.md)** — controlled Apps Script rollout and rollback.
 
-Never commit credentials, tokens, employee information, or financial records. Never point this test prototype to original spreadsheets.
+## Builds and checks
 
-See [implementation status](docs/STATUS.md).
+- [Android debug APK](.github/workflows/android-debug.yml) — verifies brand assets, runs Flutter analyzer and editor mapping tests, builds a debug APK with stable signing certificate.
+- [Backend TEST checks](.github/workflows/backend-tests.yml) — tests read-only access, role guards, simulated writes and rollback **without changing Google Sheets**.
+- The Android build requires Actions secrets `APPS_SCRIPT_URL`, `GOOGLE_WEB_CLIENT_ID` and configured stable signing credentials. No tokens or keys belong in Git.
+
+**Build green ≠ write API deployed ≠ real data tested.** All three milestones have separate acceptance gates.
+
+## Safety policy
+
+Do not write to original Google Sheets, change their formulas, touch backup automations, publish confidential data, or deploy TEST writes without completing the P0 rollout plan. Owner-only audit/history is mandatory. Calculated report tabs are read-only; actual deletion of historical financial/payroll records is not implemented.
+
+See [AUDIT_2026-11-21.md](docs/AUDIT_2026-11-21.md) before starting any change.
