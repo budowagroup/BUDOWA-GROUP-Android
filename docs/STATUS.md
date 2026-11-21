@@ -15,7 +15,7 @@
 |---|---|---|
 | P0 #1 | [Серіалізація очікуваних значень і прив'язка до рядка](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/1) | **Завершено в коді:** правильні номери колонок і фізичних рядків, Flutter analyze, unit tests, Android [CI №49](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885185423) — **success**; живий TEST UPDATE — пізніше в #4 |
 | P0 #2 | [Owner-only доступ до історії дій](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/2) | **Завершено в коді:** owner-only перевірка й негативні тести адміністратора, [Backend CI №6](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885365841) успішний; розгортання окремо в #3 |
-| P0 #3 | [Apps Script v0.4 → v0.5, спершу read-only](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/3) | **Заблоковано:** резервна копія старого проєкту, збереження ролей, розгортання та регресія не підтверджені |
+| P0 #3 | [Apps Script v0.4 → v0.5, спершу read-only](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/3) | **Підготовлено:** [backend CI №7](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885818091) перевірив читання 9 вкладок/ролі/read-only, [план для планшета](../backend/DEPLOY.md) оновлено; **заблоковано:** реальна копія v0.4, приватні налаштування та staged rollout ще не підтверджені |
 | P0 #4 | [Реальні CREATE/UPDATE TEST](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/4) | **Заблоковано:** E2E запис не здійснювався/не перевірявся; `ENABLE_TEST_WRITES=true` не вмикати |
 
 ## У черзі — P1/P2
