@@ -58,6 +58,9 @@ function doPost(e) {
       return bgOutput_({ok:true,rows:bgRead_(request)});
     }
     if (request.action === 'history') {
+      // Audit records may contain employee/financial metadata:
+      // only the owner can inspect them, never read-only admins.
+      if (role !== 'owner') throw new Error('FORBIDDEN');
       return bgOutput_({ok:true,entries:bgHistory_(request)});
     }
     if (request.action === 'create' || request.action === 'update') {
