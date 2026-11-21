@@ -64,6 +64,51 @@ ctx.bgVerify_=idToken=>({email:idToken==='owner'
   :idToken==='admin'?'admin@example.com':'stranger@example.com'});
 ctx.bgHistory_=()=>[['AUDIT_TEST_ROW']];
 const call=req=>JSON.parse(ctx.doPost({postData:{contents:JSON.stringify(req)}}).text);
+// Stage A: v0.5 must preserve read-only access to all nine tabs without
+// invoking any mutation on the backing TEST copies.
+test('all nine configured TEST tabs read as owner in read-only mode',()=>{
+  const tabs = {
+    hours:['Робочі години','Розрахунок','Працівники','Обʼєкти','Історія ставок'],
+    finance:['Операції','Панель','Закупівельники','Довідники'],
+  };
+  const seen = [];
+  for (const [book, names] of Object.entries(tabs)) {
+    for (const tab of names) {
+      const r = call({idToken:'owner',action:'read',book,tab,limit:30});
+      assert.equal(r.ok,true,book + ' / ' + tab);
+      assert.ok(Array.isArray(r.rows),book + ' / ' + tab);
+      seen.push(book+':'+tab);
+    }
+  }
+  assert.equal(seen.length,9);
+});
+test('legacy read-only admins can read all nine tabs without write rights',()=>{
+  const tabs = {
+    hours:['Робочі години','Розрахунок','Працівники','Обʼєкти','Історія ставок'],
+    finance:['Операції','Панель','Закупівельники','Довідники'],
+  };
+  for (const [book, names] of Object.entries(tabs)) {
+    for (const tab of names) {
+      const r = call({idToken:'admin',action:'read',book,tab});
+      assert.equal(r.ok,true,book + ' / ' + tab);
+      assert.equal(call({idToken:'stranger',action:'read',book,tab}).error,
+        'FORBIDDEN',book + ' / ' + tab);
+    }
+  }
+});
+test('missing write property fails closed, including UPDATE',()=>{
+  delete props.ENABLE_TEST_WRITES;
+  assert.equal(call({idToken:'owner',action:'health'}).capabilities.write,false);
+  assert.equal(call({idToken:'owner',action:'create'}).error,'TEST_WRITES_DISABLED');
+  assert.equal(call({idToken:'owner',action:'update'}).error,'TEST_WRITES_DISABLED');
+  props.ENABLE_TEST_WRITES='false';
+});
+test('read-only deployment flag rejects both create and update',()=>{
+  assert.equal(call({idToken:'owner',action:'create'}).error,'TEST_WRITES_DISABLED');
+  assert.equal(call({idToken:'owner',action:'update'}).error,'TEST_WRITES_DISABLED');
+  assert.equal(call({idToken:'admin',action:'create'}).error,'FORBIDDEN');
+  assert.equal(call({idToken:'admin',action:'update'}).error,'FORBIDDEN');
+});
 test('owner write flag defaults off',()=>{
   const r=call({idToken:'owner',action:'health'});
   assert.equal(r.ok,true);assert.equal(r.capabilities.write,false);
