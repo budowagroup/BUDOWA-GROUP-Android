@@ -13,7 +13,7 @@
 
 | Пріоритет | Завдання | Доказ / стан |
 |---|---|---|
-| P0 #1 | [Серіалізація очікуваних значень і прив'язка до рядка](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/1) | Код виправлено; Flutter analyze і regression tests у [CI №49](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885185423) **успішні**, фінальне збирання APK ще не підтверджене |
+| P0 #1 | [Серіалізація очікуваних значень і прив'язка до рядка](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/1) | **Завершено в коді:** правильні номери колонок і фізичних рядків, Flutter analyze, unit tests, Android [CI №49](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885185423) — **success**; живий TEST UPDATE — пізніше в #4 |
 | P0 #2 | [Owner-only доступ до історії дій](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/2) | **Завершено в коді:** owner-only перевірка й негативні тести адміністратора, [Backend CI №6](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885365841) успішний; розгортання окремо в #3 |
 | P0 #3 | [Apps Script v0.4 → v0.5, спершу read-only](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/3) | **Заблоковано:** резервна копія старого проєкту, збереження ролей, розгортання та регресія не підтверджені |
 | P0 #4 | [Реальні CREATE/UPDATE TEST](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/4) | **Заблоковано:** E2E запис не здійснювався/не перевірявся; `ENABLE_TEST_WRITES=true` не вмикати |
@@ -28,7 +28,7 @@
 
 ## Найближчий крок
 
-1. Дочекатися результатів Android CI для P0 #1; закрити його тільки після успішної регресії.
+1. P0 #1 завершено в коді та підтверджено CI №49; живий UPDATE залишено для E2E #4.
 2. P0 #2 завершено у коді; реальне застосування захисту перевірити під час staged rollout #3.
 3. Лише тоді — staged розгортання v0.5 при `ENABLE_TEST_WRITES=false` та тестування читання.
 4. Лише після проходження всіх перевірок — окремі реальні TEST CREATE/UPDATE.
