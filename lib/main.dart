@@ -94,20 +94,16 @@ class _BudowaAppState extends State<BudowaApp> {
     if (!canWriteTest || !editableTab || busy) return;
     final selectedBook = book;
     final selectedTab = tab;
-    int? actualRow;
-    if (existing != null) {
-      final index = rows.indexOf(existing);
-      if (index < 0 || index >= sheetRowNumbers.length) {
-        if (mounted) setState(() => error = 'Не вдалося визначити рядок таблиці');
-        return;
-      }
-      actualRow = sheetRowNumbers[index];
+    final actualRow = existing == null
+        ? null
+        : sourceSheetRowForRecord(rows, sheetRowNumbers, existing);
+    if (existing != null && actualRow == null) {
+      if (mounted) setState(() => error = 'Не вдалося визначити рядок таблиці');
+      return;
     }
-    final expected = <String, String>{
-      if (existing != null)
-        for (final f in testFields(selectedBook, selectedTab))
-          'undefined': cell(existing, f.column),
-    };
+    final expected = existing == null
+        ? <String, String>{}
+        : expectedEditableFields(testFields(selectedBook, selectedTab), existing);
     final rowToEdit = actualRow;
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => SheetRecordEditor(
