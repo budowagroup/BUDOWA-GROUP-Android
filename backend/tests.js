@@ -62,6 +62,7 @@ test('invalid tab rejected',()=>fails(
 ctx.bgVerify_=idToken=>({email:idToken==='owner'
   ?'biuro.budowa.group@gmail.com'
   :idToken==='admin'?'admin@example.com':'stranger@example.com'});
+ctx.bgHistory_=()=>[['AUDIT_TEST_ROW']];
 const call=req=>JSON.parse(ctx.doPost({postData:{contents:JSON.stringify(req)}}).text);
 test('owner write flag defaults off',()=>{
   const r=call({idToken:'owner',action:'health'});
@@ -69,6 +70,17 @@ test('owner write flag defaults off',()=>{
 });
 test('owner write rejected when off',()=>{
   assert.equal(call({idToken:'owner',action:'create'}).error,'TEST_WRITES_DISABLED');
+});
+test('only owner may read the audit history',()=>{
+  const owner = call({idToken:'owner',action:'history',book:'finance',tab:'Операції'});
+  assert.equal(owner.ok,true);
+  assert.equal(owner.entries[0][0],'AUDIT_TEST_ROW');
+  assert.equal(
+    call({idToken:'admin',action:'history',book:'finance',tab:'Операції'}).error,
+    'FORBIDDEN');
+  assert.equal(
+    call({idToken:'stranger',action:'history',book:'finance',tab:'Операції'}).error,
+    'FORBIDDEN');
 });
 test('admin can read but not write',()=>{
   props.ENABLE_TEST_WRITES='true';
