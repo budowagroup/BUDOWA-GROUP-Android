@@ -59,6 +59,22 @@ List<TestField> testFields(String book, String tab) {
   return const [];
 }
 
+/// Preserve exact display strings for optimistic concurrency checks.
+/// The Apps Script backend compares values from getDisplayValues() verbatim.
+Map<String, String> expectedEditableFields(
+    List<TestField> fields, List<String> original) => {
+  for (final field in fields)
+    '${field.column}': field.column < original.length ? original[field.column] : '',
+};
+
+/// Sorting must never change the physical source row used for UPDATE.
+int? sourceSheetRowForRecord(
+    List<List<String>> sourceRows, List<int> sheetRowNumbers, List<String> record) {
+  final index = sourceRows.indexOf(record);
+  if (index < 0 || index >= sheetRowNumbers.length) return null;
+  return sheetRowNumbers[index];
+}
+
 String testNumber(String source) {
   var s=source.replaceAll(RegExp(r'[^0-9,.\-]'),'');
   if (s.contains('.') && s.contains(',')) {
