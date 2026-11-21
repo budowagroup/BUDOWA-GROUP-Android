@@ -1,13 +1,41 @@
-# BUDOWA GROUP Android — TEST v0.2
+# BUDOWA GROUP — TEST: поточний стан
 
-This is a read-only prototype, NOT a production payroll or finance application.
+**Початкова перевірка:** 21.11.2026. **Основний аудит:** [AUDIT_2026-11-21.md](AUDIT_2026-11-21.md). **Правила виконання:** [WORKFLOW.md](WORKFLOW.md).
 
-- Flutter UI reads TEST spreadsheet copies through a separately deployed Google Apps Script API.
-- Google Sign-In requires a configured OAuth Web client, Android client with signing SHA-1, and Apps Script deployment URL.
-- The backend must enforce authorization. No write operations are implemented.
-- Original spreadsheets and backup automations must remain untouched.
-- GitHub Actions debug APK build requires independent verification.
-- Debug APK built without --dart-define configuration cannot sign in.
-- Never commit credentials, tokens, personal information or financial data.
+## Підтверджено
 
-Build variables: APPS_SCRIPT_URL and GOOGLE_WEB_CLIENT_ID. Values are not configured in this repository.
+- Flutter Android TEST читає дві TEST Google Sheets; Google-авторизацію owner підтверджено скриншотами з Android-планшета.
+- Реалізовано перегляд **9 вкладок** (5 годин/зарплат і 4 фінансів/закупівель), сортування, картки, кольори, фінансову панель.
+- Останні попередньо підтверджені GitHub збірки Android і backend tests проходили. Нові коміти перевіряються окремо; не переносити старий зелений статус на новий код.
+- У тестовому репозиторії є `lib/sheet_record_editor.dart` та `backend/Code.gs` v0.5 із підготовленими CREATE/UPDATE і захистом формул; це **не означає, що запис увімкнено на сервері**.
+
+## У роботі — P0
+
+| Пріоритет | Завдання | Доказ / стан |
+|---|---|---|
+| P0 #1 | [Серіалізація очікуваних значень і прив'язка до рядка](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/1) | Код виправлено, додано Flutter unit tests; **нова CI збірка ще має бути підтверджена** |
+| P0 #2 | [Owner-only доступ до історії дій](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/2) | **Не завершено:** серверна рольова перевірка має бути додана і перевірена |
+| P0 #3 | [Apps Script v0.4 → v0.5, спершу read-only](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/3) | **Заблоковано:** резервна копія старого проєкту, збереження ролей, розгортання та регресія не підтверджені |
+| P0 #4 | [Реальні CREATE/UPDATE TEST](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/4) | **Заблоковано:** E2E запис не здійснювався/не перевірявся; `ENABLE_TEST_WRITES=true` не вмикати |
+
+## У черзі — P1/P2
+
+- [#5](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/5) — всі форми і довідники; вибір зі списків, безпечна зміна імен.
+- [#6](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/6) — динамічні місяці і перехід у 2027 рік.
+- [#7](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/7) — завантаження після порожніх сторінок і коректне сортування.
+- [#8](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/8) — кольори об'єктів з Google Sheets у всіх розділах.
+- [#9](https://github.com/budowagroup/BUDOWA-GROUP-Android/issues/9) — перевірка всіх екранів, права, UX, журнали, стабільність, release APK/AAB.
+
+## Найближчий крок
+
+1. Дочекатися результатів Android CI для P0 #1; закрити його тільки після успішної регресії.
+2. Виправити P0 #2 (owner-only history) із негативним тестом адміністратора.
+3. Лише тоді — staged розгортання v0.5 при `ENABLE_TEST_WRITES=false` та тестування читання.
+4. Лише після проходження всіх перевірок — окремі реальні TEST CREATE/UPDATE.
+
+## Незмінні правила
+
+- Оригінальні Google Sheets і backup-автоматизації **не змінюються**.
+- Debug APK — не реліз; mock tests — не доказ успішного живого запису.
+- Власник єдиний, хто може бачити історію дій та змінювати TEST-записи. Адміни, доки не узгоджено інакше, — тільки читання.
+- Всі зміни підтверджуються комітами, CI і за потреби живими тестами; без верифікації — статус «у роботі».
