@@ -112,6 +112,8 @@ test('read-only deployment flag rejects both create and update',()=>{
 test('owner write flag defaults off',()=>{
   const r=call({idToken:'owner',action:'health'});
   assert.equal(r.ok,true);assert.equal(r.capabilities.write,false);
+  assert.equal(r.version,'0.5');
+  assert.equal(r.dataSource,'BG TEST Android API');
 });
 test('owner write rejected when off',()=>{
   assert.equal(call({idToken:'owner',action:'create'}).error,'TEST_WRITES_DISABLED');
