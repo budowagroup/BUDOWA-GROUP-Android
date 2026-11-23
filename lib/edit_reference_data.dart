@@ -94,7 +94,8 @@ Future<Map<int, List<String>>> loadLookupOptions(
           : '';
       if (value.isNotEmpty) seen.add(value);
     }
-    final options = seen.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    // Preserve the order of the actual Google Sheets reference list.
+    final options = seen.toList();
     if (options.isEmpty && spec.required) {
       throw FormatException('Довідник «${spec.tab}» порожній');
     }
