@@ -1,0 +1,67 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:budowa_group/api_health_status.dart';
+
+void main() {
+  test('v0.4 health has no write permission or confirmed source', () {
+    final health = ApiHealthStatus.fromResponse({
+      'ok': true, 'role': 'owner', 'version': '0.4',
+    });
+    expect(health.canWriteTest, isFalse);
+    expect(health.dataSource, 'не підтверджено');
+    expect(health.version, '0.4');
+  });
+
+  test('v0.5 owner requires all explicit write capabilities', () {
+    final health = ApiHealthStatus.fromResponse({
+      'ok': true, 'role': 'owner', 'version': '0.5',
+      'dataSource': 'BG TEST Android API',
+      'capabilities': {'write': true, 'create': true, 'update': true},
+    });
+    expect(health.canWriteTest, isTrue);
+    expect(health.dataSource, 'BG TEST Android API');
+  });
+
+  test('admin is always read-only despite server write flags', () {
+    final health = ApiHealthStatus.fromResponse({
+      'ok': true, 'role': 'admin',
+      'capabilities': {'write': true, 'create': true, 'update': true},
+    });
+    expect(health.canWriteTest, isFalse);
+  });
+
+  test('partial flags fail closed', () {
+    for (final flags in [
+      {'write': true, 'create': true},
+      {'write': true, 'update': true},
+      {'write': true, 'create': true, 'update': false},
+      <String, bool>{},
+    ]) {
+      final health = ApiHealthStatus.fromResponse({
+        'ok': true, 'role': 'owner', 'capabilities': flags,
+      });
+      expect(health.canWriteTest, isFalse);
+    }
+  });
+
+  test('unrecognized roles or failed health cannot authorize access', () {
+    for (final role in ['viewer', 'none', null]) {
+      expect(
+        () => ApiHealthStatus.fromResponse({'ok': true, 'role': role}),
+        throwsFormatException,
+      );
+    }
+    expect(
+      () => ApiHealthStatus.fromResponse({'ok': false, 'role': 'owner'}),
+      throwsFormatException,
+    );
+  });
+
+  test('unknown version or source are labeled unverified', () {
+    final health = ApiHealthStatus.fromResponse({
+      'ok': true, 'role': 'owner',
+      'version': '0.5<bad>', 'dataSource': 'LIVE',
+    });
+    expect(health.version, 'невідома');
+    expect(health.dataSource, 'не підтверджено');
+  });
+}
