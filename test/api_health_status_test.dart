@@ -23,7 +23,8 @@ void main() {
 
   test('admin is always read-only despite server write flags', () {
     final health = ApiHealthStatus.fromResponse({
-      'ok': true, 'role': 'admin',
+      'ok': true, 'role': 'admin', 'version': '0.5',
+      'dataSource': 'BG TEST Android API',
       'capabilities': {'write': true, 'create': true, 'update': true},
     });
     expect(health.canWriteTest, isFalse);
@@ -37,10 +38,25 @@ void main() {
       <String, bool>{},
     ]) {
       final health = ApiHealthStatus.fromResponse({
-        'ok': true, 'role': 'owner', 'capabilities': flags,
+        'ok': true, 'role': 'owner', 'version': '0.5',
+        'dataSource': 'BG TEST Android API', 'capabilities': flags,
       });
       expect(health.canWriteTest, isFalse);
     }
+  });
+
+  test('owner cannot write through an unrecognized TEST server source', () {
+    final response = {
+      'ok': true,
+      'role': 'owner',
+      'version': '0.5',
+      'dataSource': 'UNKNOWN',
+      'capabilities': {'write': true, 'create': true, 'update': true},
+    };
+    expect(ApiHealthStatus.fromResponse(response).canWriteTest, isFalse);
+    response['dataSource'] = 'BG TEST Android API';
+    response['version'] = '0.4';
+    expect(ApiHealthStatus.fromResponse(response).canWriteTest, isFalse);
   });
 
   test('unrecognized roles or failed health cannot authorize access', () {

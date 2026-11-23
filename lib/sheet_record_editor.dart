@@ -100,9 +100,10 @@ class SheetRecordEditor extends StatefulWidget {
   final String book,tab;
   final int? sheetRow;
   final List<String>? original;
+  final Map<int,List<String>> options;
   final Future<void> Function(Map<String,String> values,String requestId) onSave;
   const SheetRecordEditor({super.key,required this.book,required this.tab,
-    required this.onSave,this.sheetRow,this.original});
+    required this.onSave,this.sheetRow,this.original,this.options=const {}});
   @override
   State<SheetRecordEditor> createState()=>_SheetRecordEditorState();
 }
@@ -135,6 +136,10 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     final s=(raw??'').trim();
     if(f.required && s.isEmpty)return 'Обов’язкове поле';
     if(s.isEmpty)return null;
+    final choices=widget.options[f.column];
+    if(choices!=null && !choices.contains(s)) {
+      return 'Оберіть значення з довідника';
+    }
     if(f.kind=='number'||f.kind=='positive'){
       final n=double.tryParse(testNumber(s));
       if(n==null||!n.isFinite||n<0||(f.kind=='positive'&&n==0))return 'Некоректна сума';
@@ -155,6 +160,12 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       return 'Формули заборонені';
     return null;
   }
+
+  bool isLockedName(TestField field) =>
+      widget.sheetRow != null &&
+      field.column == 0 &&
+      <String>{'Працівники', 'Обʼєкти', 'Закупівельники', 'Довідники'}
+          .contains(widget.tab);
 
   Future<void> pick(TestField f)async{
     if(f.kind=='date'){
@@ -220,20 +231,39 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
         child:Text('Редагується лише ім’я. Надходження, витрати та баланс — формули.')),
       if(widget.tab=='Довідники')const Padding(padding:EdgeInsets.only(top:8),
         child:Text('Об’єкти надходять із таблиці «Обʼєкти». Тут редагуються лише категорії.')),
+      if(widget.sheetRow!=null &&
+          <String>{'Працівники', 'Обʼєкти', 'Закупівельники', 'Довідники'}
+              .contains(widget.tab))
+        const Padding(padding:EdgeInsets.only(top:8),
+          child:Text('Назву не можна змінити без міграції залежних записів.')),
       const SizedBox(height:14),
       ...fields.map((f)=>Padding(padding:const EdgeInsets.only(bottom:12),
-        child:(f.kind=='active'||f.kind=='operation')
+        child:(f.kind=='active'||f.kind=='operation'||widget.options.containsKey(f.column))
           ? DropdownButtonFormField<String>(
-              initialValue:controllers[f.column]!.text.isEmpty
-                ? null:controllers[f.column]!.text,
+              initialValue:(
+                widget.options.containsKey(f.column)
+                  ? widget.options[f.column]!
+                  : (f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
+              ).contains(controllers[f.column]!.text)
+                  ? controllers[f.column]!.text : null,
               isExpanded:true,
-              decoration:InputDecoration(labelText:f.name,border:const OutlineInputBorder()),
-              items:(f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
-                .map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),
-              onChanged:saving?null:(v){controllers[f.column]!.text=v??'';},
+              decoration:InputDecoration(
+                labelText:f.name,
+                border:const OutlineInputBorder(),
+                helperText:widget.options.containsKey(f.column)
+                    ? 'Дані з відповідного довідника Google Sheets' : null,
+              ),
+              items:(
+                widget.options.containsKey(f.column)
+                  ? widget.options[f.column]!
+                  : (f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
+              ).map((s)=>DropdownMenuItem(value:s,child:Text(s,
+                  overflow:TextOverflow.ellipsis))).toList(),
+              onChanged:saving||isLockedName(f)?null:
+                (v){controllers[f.column]!.text=v??'';},
               validator:(v)=>check(f,v))
           :TextFormField(
-              controller:controllers[f.column],enabled:!saving,
+              controller:controllers[f.column],enabled:!saving && !isLockedName(f),
               keyboardType:f.kind=='number'||f.kind=='positive'
                 ?const TextInputType.numberWithOptions(decimal:true):TextInputType.text,
               decoration:InputDecoration(labelText:f.name,border:const OutlineInputBorder(),

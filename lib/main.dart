@@ -2,6 +2,7 @@ import 'api_health_status.dart';
 import 'read_only_diagnostics.dart';
 import 'hours_entry_form.dart';
 import 'sheet_record_editor.dart';
+import 'edit_reference_data.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -98,46 +99,88 @@ class _BudowaAppState extends State<BudowaApp> {
     if (!canWriteTest || !editableTab || busy) return;
     final selectedBook = book;
     final selectedTab = tab;
+    if (existing != null &&
+        <String>{'Закупівельники','Довідники'}.contains(selectedTab)) {
+      setState(() => error =
+          'Перейменування записів довідника заблоковане для захисту формул.');
+      return;
+    }
     final actualRow = existing == null
         ? null
         : sourceSheetRowForRecord(rows, sheetRowNumbers, existing);
     if (existing != null && actualRow == null) {
-      if (mounted) setState(() => error = 'Не вдалося визначити рядок таблиці');
+      setState(() => error = 'Не вдалося визначити рядок таблиці');
       return;
     }
     final expected = existing == null
         ? <String, String>{}
         : expectedEditableFields(testFields(selectedBook, selectedTab), existing);
-    final rowToEdit = actualRow;
-    final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => SheetRecordEditor(
-        book: selectedBook,
-        tab: selectedTab,
-        sheetRow: rowToEdit,
-        original: existing,
-        onSave: (values, requestId) async {
-          final user = account;
-          if (user == null || !canWriteTest) throw Exception('Немає дозволу на запис');
-          final auth = await user.authentication;
-          final currentToken = auth.idToken;
-          if (currentToken == null) throw Exception('Немає дійсного Google ID Token');
-          final payload = <String, dynamic>{
-            'action': rowToEdit == null ? 'create' : 'update',
-            'book': selectedBook, 'tab': selectedTab,
-            'values': values, 'requestId': requestId,
-            if (rowToEdit != null) 'rowNumber': rowToEdit,
-            if (rowToEdit != null) 'expected': expected,
-          };
-          await request(payload, currentToken);
-        },
-      )),
-    );
-    if (result == true && mounted) {
-      await load();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Запис збережено в TEST Google Sheets і дані оновлено.')));
+    final activeAccount = account;
+    if (activeAccount == null) return;
+    setState(() { busy = true; error = null; });
+    try {
+      final tokenValue = (await activeAccount.authentication).idToken;
+      if (tokenValue == null) throw Exception('Не вдалося оновити авторизацію');
+      final check = ApiHealthStatus.fromResponse(
+          await request({'action':'health'},tokenValue));
+      if (!check.canWriteTest) {
+        if (mounted) setState(() => canWriteTest = false);
+        throw Exception('Сервер не дозволив TEST-запис. Перевірте Apps Script.');
       }
+      final options = await loadLookupOptions(
+        selectedBook, selectedTab,
+        (payload) => request(payload, tokenValue),
+      );
+      if (!mounted || account != activeAccount) return;
+      final updated = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => SheetRecordEditor(
+          book: selectedBook,
+          tab: selectedTab,
+          sheetRow: actualRow,
+          original: existing,
+          options: options,
+          onSave: (values, requestId) async {
+            final user = account;
+            if (user == null || user != activeAccount) {
+              throw Exception('Сесію змінено. Увійдіть повторно.');
+            }
+            final freshToken = (await user.authentication).idToken;
+            if (freshToken == null) {
+              throw Exception('Не вдалося оновити Google ID Token');
+            }
+            // Recheck the actual server permissions and source on every write.
+            final liveHealth = ApiHealthStatus.fromResponse(
+                await request({'action':'health'},freshToken));
+            if (!liveHealth.canWriteTest) {
+              if (mounted) setState(() => canWriteTest = false);
+              throw Exception('TEST-запис вимкнено на сервері.');
+            }
+            final payload = <String, dynamic>{
+              'action': actualRow == null ? 'create' : 'update',
+              'book': selectedBook,
+              'tab': selectedTab,
+              'values': values,
+              'requestId': requestId,
+              if (actualRow != null) 'rowNumber': actualRow,
+              if (actualRow != null) 'expected': expected,
+            };
+            await request(payload, freshToken);
+          },
+        )),
+      );
+      if (updated == true && mounted) {
+        await load();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error == null
+              ? 'TEST-запис збережено та дані оновлено.'
+              : 'TEST-запис збережено. Оновлення списку не вдалося — натисніть «Оновити».'),
+        ));
+      }
+    } catch (exception) {
+      if (mounted) setState(() => error = '$exception');
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
