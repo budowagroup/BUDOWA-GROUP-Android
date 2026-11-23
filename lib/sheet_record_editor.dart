@@ -186,6 +186,33 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     }
   }
 
+  String errorText(Object exception) {
+    final s = exception.toString();
+    if (s.contains('EDIT_CONFLICT_REFRESH')) {
+      return 'Цей рядок змінено після завантаження. Закрийте форму, оновіть список та повторіть.';
+    }
+    if (s.contains('TEST_WRITES_DISABLED') || s.contains('Немає дозволу')) {
+      return 'Збереження вимкнене сервером. Перевірте TEST-підключення.';
+    }
+    if (s.contains('MISSING_FORMULA_ROW')) {
+      return 'Для нового запису не підготовлені розрахункові формули. Дані не змінено.';
+    }
+    if (s.contains('REQUEST_ALREADY_STARTED')) {
+      return 'Попередній запит ще не завершився. Перевірте TEST-таблицю перед повтором.';
+    }
+    if (s.contains('WRITE_FAILED_REVIEW')) {
+      return 'Помилка часткового запису. Потрібна перевірка журналу TEST.';
+    }
+    if (s.contains('DUPLICATE_NAME') || s.contains('DUPLICATE_RATE_DATE')) {
+      return 'Такий запис уже існує в TEST-таблиці.';
+    }
+    if (s.contains('EMPLOYEE_NOT_FOUND') || s.contains('PROJECT_NOT_FOUND') ||
+        s.contains('BUYER_NOT_FOUND') || s.contains('CATEGORY_NOT_FOUND')) {
+      return 'Довідник змінився. Закрийте форму і завантажте його ще раз.';
+    }
+    return s;
+  }
+
   Future<void> save()async{
     if(saving||!formKey.currentState!.validate())return;
     if(widget.tab=='Робочі години' &&
@@ -214,7 +241,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       await widget.onSave(values,requestId);
       if(mounted)Navigator.pop(context,true);
     }catch(e){
-      if(mounted)setState(()=>error='$e');
+      if(mounted)setState(()=>error=errorText(e));
     }finally{
       if(mounted)setState(()=>saving=false);
     }
@@ -261,7 +288,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
                   overflow:TextOverflow.ellipsis))).toList(),
               onChanged:saving||isLockedName(f)?null:
                 (v){controllers[f.column]!.text=v??'';},
-              validator:(v)=>check(f,v))
+              validator:(v)=>check(f,v??controllers[f.column]!.text))
           :TextFormField(
               controller:controllers[f.column],enabled:!saving && !isLockedName(f),
               keyboardType:f.kind=='number'||f.kind=='positive'
