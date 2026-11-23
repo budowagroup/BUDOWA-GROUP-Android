@@ -41,8 +41,8 @@ void main() {
     });
     expect(requests, 2);
     expect(choices[2], ['Ігор', 'Роман']);
-    expect(choices[6], ['Інструменти', 'Матеріали']);
-    expect(choices[7], ['Rembertow', 'Łomianki']);
+    expect(choices[6], ['Матеріали', 'Інструменти']);
+    expect(choices[7], ['Łomianki', 'Rembertow']);
   });
 
   test('empty mandatory reference is never accepted', () async {
