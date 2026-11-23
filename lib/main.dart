@@ -1,3 +1,4 @@
+import 'api_health_status.dart';
 import 'hours_entry_form.dart';
 import 'sheet_record_editor.dart';
 import 'dart:convert';
@@ -27,6 +28,8 @@ class _BudowaAppState extends State<BudowaApp> {
   GoogleSignInAccount? account;
   String? token;
   String? role;
+  String? apiVersion;
+  String? apiDataSource;
   String? error;
   bool busy = false;
   bool showLaunchSplash = true;
@@ -531,13 +534,23 @@ class _BudowaAppState extends State<BudowaApp> {
       if (idToken == null) throw Exception('Google не повернув ID Token. Перевірте OAuth конфігурацію.');
       final result = await request({'action': 'health'}, idToken);
       if (!mounted) return;
-      final enabled = result['role'] == 'owner' && result['capabilities'] is Map &&
-          (result['capabilities'] as Map)['write'] == true;
-      setState(() { account = signed; token = idToken; role = '${result['role']}'; canWriteTest = enabled; });
+      final health = ApiHealthStatus.fromResponse(result);
+      setState(() {
+        account = signed;
+        token = idToken;
+        role = health.role;
+        apiVersion = health.version;
+        apiDataSource = health.dataSource;
+        canWriteTest = health.canWriteTest;
+      });
       await load();
     } catch (e) {
       await google.signOut();
-      if (mounted) setState(() { account = null; token = null; role = null; error = '$e'; });
+      if (mounted) setState(() {
+        account = null; token = null; role = null;
+        apiVersion = null; apiDataSource = null;
+        canWriteTest = false; error = '$e';
+      });
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -609,7 +622,12 @@ class _BudowaAppState extends State<BudowaApp> {
   }
 
   Future<void> logout() async {
-    if (mounted) setState(() { account = null; token = null; role = null; rows = []; sheetRowNumbers = []; canWriteTest = false; error = null; });
+    if (mounted) setState(() {
+      account = null; token = null; role = null;
+      apiVersion = null; apiDataSource = null;
+      rows = []; sheetRowNumbers = [];
+      canWriteTest = false; error = null;
+    });
     await google.signOut();
   }
 
@@ -665,6 +683,10 @@ class _BudowaAppState extends State<BudowaApp> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.w700)),
                       Text('Роль: $role', style: const TextStyle(fontSize: 12)),
+                       Text(
+                         "API: ${apiVersion ?? 'невідома'} • Джерело: ${apiDataSource ?? 'не підтверджено'}",
+                         style: const TextStyle(fontSize: 12),
+                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
                         key: ValueKey('book-$book'),
