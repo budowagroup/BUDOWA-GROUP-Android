@@ -1,4 +1,5 @@
 import 'api_health_status.dart';
+import 'read_only_diagnostics.dart';
 import 'hours_entry_form.dart';
 import 'sheet_record_editor.dart';
 import 'dart:convert';
@@ -621,6 +622,35 @@ class _BudowaAppState extends State<BudowaApp> {
     }
   }
 
+  Future<void> openReadOnlyDiagnostics() async {
+    if (busy || account == null) return;
+    final selectedAccount = account!;
+    setState(() { busy = true; error = null; });
+    try {
+      final authorization = await selectedAccount.authentication;
+      final freshToken = authorization.idToken;
+      if (freshToken == null) {
+        throw Exception('Не вдалося отримати Google ID Token');
+      }
+      if (!mounted || account != selectedAccount) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => ReadOnlyDiagnosticsScreen(
+            apiVersion: apiVersion ?? 'невідома',
+            dataSource: apiDataSource ?? 'не підтверджено',
+            read: (tab) => request(readOnlyPayload(tab), freshToken),
+          ),
+        ),
+      );
+    } catch (exception) {
+      if (mounted) {
+        setState(() => error = 'Діагностику не запущено: $exception');
+      }
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> logout() async {
     if (mounted) setState(() {
       account = null; token = null; role = null;
@@ -686,6 +716,14 @@ class _BudowaAppState extends State<BudowaApp> {
                        Text(
                          "API: ${apiVersion ?? 'невідома'} • Джерело: ${apiDataSource ?? 'не підтверджено'}",
                          style: const TextStyle(fontSize: 12),
+                       ),
+                       Align(
+                         alignment: Alignment.centerLeft,
+                         child: TextButton.icon(
+                           onPressed: busy ? null : openReadOnlyDiagnostics,
+                           icon: const Icon(Icons.fact_check_outlined),
+                           label: const Text('Перевірити всі 9 вкладок (читання)'),
+                         ),
                        ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
