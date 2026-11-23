@@ -52,6 +52,7 @@ function doPost(e) {
       .getProperty('ENABLE_TEST_WRITES') === 'true';
     if (request.action === 'health') {
       return bgOutput_({ok:true,role:role,version:'0.5',
+        dataSource:'BG TEST Android API',
         capabilities:{write:enabled,create:enabled,update:enabled}});
     }
     if (request.action === 'read') {
