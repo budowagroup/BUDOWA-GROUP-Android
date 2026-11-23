@@ -56,7 +56,13 @@ function doPost(e) {
         capabilities:{write:enabled,create:enabled,update:enabled}});
     }
     if (request.action === 'read') {
-      return bgOutput_({ok:true,rows:bgRead_(request)});
+      var readResult={ok:true,rows:bgRead_(request)};
+      // Opt-in metadata for recent Android clients; legacy v0.4 reads stay
+      // compatible. The last meaningful record can occur after blank rows.
+      if (request.includeMeta === true) {
+        readResult.lastDataRow=bgLastDataRow_(request);
+      }
+      return bgOutput_(readResult);
     }
     if (request.action === 'history') {
       // Audit records may contain employee/financial metadata:
@@ -135,6 +141,26 @@ function bgRead_(request) {
   if (start > target.sheet.getMaxRows()) return [];
   var count = Math.min(limit,target.sheet.getMaxRows()-start+1);
   return target.sheet.getRange(start,1,count,cfg.width).getDisplayValues();
+}
+function bgLastDataRow_(request) {
+  var target=bgTarget_(request,false);
+  var sheet=target.sheet,cfg=target.cfg;
+  var last=sheet.getLastRow();
+  if (last<cfg.start) return cfg.start-1;
+  // Finance dashboard is a layout with labels mostly in column B.
+  if (target.book==='finance' && target.tab==='Панель') return last;
+  var columns=target.tab==='Довідники' ? [0,1] :
+    [typeof cfg.key==='number' ? cfg.key : 0];
+  var first=Math.min.apply(null,columns),end=Math.max.apply(null,columns);
+  var displays=sheet.getRange(cfg.start,first+1,last-cfg.start+1,end-first+1)
+    .getDisplayValues();
+  for(var i=displays.length-1;i>=0;i--) {
+    var hasKey=columns.some(function(c){
+      return String(displays[i][c-first] || '').trim()!=='';
+    });
+    if (hasKey) return cfg.start+i;
+  }
+  return cfg.start-1;
 }
 function bgHistory_(request) {
   var target = bgTarget_(request,false);

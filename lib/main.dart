@@ -613,22 +613,28 @@ class _BudowaAppState extends State<BudowaApp> {
       final currentAuth = await currentAccount.authentication;
       final freshToken = currentAuth.idToken;
       if (freshToken == null) throw Exception('Не вдалося оновити Google ID Token. Увійдіть повторно.');
-      // Load every available page before sorting; the first 30 rows
-      // otherwise hide newer payroll and financial transactions.
-      const pageSize = 30;
-      const maxPages = 200; // Limit total scan to 6000 rows.
+      // Read every record, including those after fully empty page blocks.
+      // v0.5 optionally tells us the last meaningful source row, reducing
+      // requests without losing the original physical row numbers.
+      const pageSize = 100;
+      const maxPages = 100; // Explicit cap: 10 000 source rows.
       var startRow = selectedBook == 'finance' && selectedTab == 'Панель'
           ? 3 : selectedTab == 'Розрахунок' ? 5 : 4;
       final parsed = <List<String>>[];
       final rowNumbers = <int>[];
       var reachedEnd = false;
+      int? lastDataRow;
       for (var page = 0; page < maxPages; page++) {
         if (!mounted || account != currentAccount ||
             book != selectedBook || tab != selectedTab) return;
         final result = await request({
           'action': 'read', 'book': selectedBook, 'tab': selectedTab,
           'start': startRow, 'limit': pageSize,
+          if (page == 0 && apiVersion == '0.5') 'includeMeta': true,
         }, freshToken);
+        if (page == 0 && result['lastDataRow'] is int) {
+          lastDataRow = result['lastDataRow'] as int;
+        }
         final raw = result['rows'];
         if (raw is! List || raw.any((row) => row is! List)) {
           throw const FormatException('Некоректний формат рядків API');
@@ -636,8 +642,11 @@ class _BudowaAppState extends State<BudowaApp> {
         final portion = raw.map<List<String>>((row) =>
           (row as List).map<String>((value) =>
             value == null ? '' : '$value').toList()).toList();
-        if (portion.isEmpty || portion.every((record) =>
-            record.every((value) => value.trim().isEmpty))) {
+        if (lastDataRow != null && lastDataRow < startRow) {
+          reachedEnd = true;
+          break;
+        }
+        if (portion.isEmpty) {
           reachedEnd = true;
           break;
         }
@@ -645,7 +654,9 @@ class _BudowaAppState extends State<BudowaApp> {
         for (var i = 0; i < portion.length; i++) {
           rowNumbers.add(startRow + i);
         }
-        if (portion.length < pageSize) {
+        if (portion.length < pageSize ||
+            (lastDataRow != null &&
+                startRow + portion.length - 1 >= lastDataRow)) {
           reachedEnd = true;
           break;
         }
@@ -653,8 +664,8 @@ class _BudowaAppState extends State<BudowaApp> {
       }
       if (!reachedEnd) {
         throw const FormatException(
-          'Досягнуто межі 6000 рядків. Завантаження неповне — '
-          'потрібне розширення пагінації API.');
+          'Досягнуто межі 10000 рядків. Дані неповні — '
+          'потрібне збільшення ліміту.');
       }
       if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
         setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; });

@@ -64,6 +64,7 @@ ctx.bgVerify_=idToken=>({email:idToken==='owner'
   :idToken==='admin'?'admin@example.com':'stranger@example.com'});
 ctx.bgHistory_=()=>[['AUDIT_TEST_ROW']];
 const call=req=>JSON.parse(ctx.doPost({postData:{contents:JSON.stringify(req)}}).text);
+const originalTarget=ctx.bgTarget_;
 // Stage A: v0.5 must preserve read-only access to all nine tabs without
 // invoking any mutation on the backing TEST copies.
 test('all nine configured TEST tabs read as owner in read-only mode',()=>{
@@ -95,6 +96,28 @@ test('legacy read-only admins can read all nine tabs without write rights',()=>{
         'FORBIDDEN',book + ' / ' + tab);
     }
   }
+});
+test('last meaningful data row survives blank gaps',()=>{
+  const sheet={
+    getLastRow:()=>8,
+    getRange:()=>({getDisplayValues:()=>[
+      ['A'], [''], [''], ['B'], [''], 
+    ]}),
+  };
+  ctx.bgTarget_=()=>({sheet,cfg:{start:4,key:0},
+    book:'finance',tab:'Операції'});
+  assert.equal(ctx.bgLastDataRow_({book:'finance',tab:'Операції'}),7);
+  ctx.bgTarget_=()=>({
+    sheet:{
+      getLastRow:()=>7,
+      getRange:()=>({getDisplayValues:()=>[
+        ['Категорія',''],['',''],['','Об'єкт'],['',''],
+      ]}),
+    },
+    cfg:{start:4},book:'finance',tab:'Довідники',
+  });
+  assert.equal(ctx.bgLastDataRow_({book:'finance',tab:'Довідники'}),6);
+  ctx.bgTarget_=originalTarget;
 });
 test('missing write property fails closed, including UPDATE',()=>{
   delete props.ENABLE_TEST_WRITES;
