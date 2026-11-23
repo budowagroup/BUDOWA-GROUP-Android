@@ -38,8 +38,8 @@ jobs:
         run: dart run flutter_launcher_icons
       - name: Analyze
         run: flutter analyze --no-fatal-infos
-      - name: Test editor mapping
-        run: flutter test test/editor_payload_test.dart
+      - name: Test editor mapping and fail-closed API health
+        run: flutter test
       - name: Restore and verify stable Android debug signing key
         shell: bash
         env:
