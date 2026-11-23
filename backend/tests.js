@@ -111,7 +111,7 @@ test('last meaningful data row survives blank gaps',()=>{
     sheet:{
       getLastRow:()=>7,
       getRange:()=>({getDisplayValues:()=>[
-        ['Категорія',''],['',''],['','Об'єкт'],['',''],
+        ['Категорія',''],['',''],['','Обʼєкт'],['',''],
       ]}),
     },
     cfg:{start:4},book:'finance',tab:'Довідники',
