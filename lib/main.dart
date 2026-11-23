@@ -253,7 +253,8 @@ class _BudowaAppState extends State<BudowaApp> {
                 fontWeight: FontWeight.bold,
                 color: cell(record,4)=='Витрати'
                   ? const Color(0xFFAD3C32) : const Color(0xFF176B4D)))),
-          if (canWriteTest && editableTab)
+          if (canWriteTest && editableTab &&
+                !<String>{'Закупівельники', 'Довідники'}.contains(tab))
             Align(alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: busy ? null : () => openRecordEditor(record),
