@@ -12,6 +12,14 @@ The source is **backend/Code.gs**, with automated checks in **backend/tests.js**
 - The version-controlled v0.5 `backend/appsscript.json` intentionally requests `https://www.googleapis.com/auth/spreadsheets` plus `https://www.googleapis.com/auth/script.external_request`. The project owner must review and explicitly grant the new authorization in the Apps Script editor **before attempting live TEST write operations**. Leave `ENABLE_TEST_WRITES=false` until staging checks pass.
 - The original v0.4 template includes **three** administrator slots. The current requirement is **two** admins. Confirm the exact two active accounts privately against the actual live project before setting `READ_ONLY_ADMINS`; do not blindly copy the archived list or publish addresses.
 
+## Перевірено за посиланнями користувача 24.11.2026
+
+Існують **два окремі проєкти** (Google Drive metadata):
+- Основний `BUDOWA GROUP Android API` — створений 18.11.2026.
+- `BUDOWA GROUP Android API — BACKUP v0.4 — 2026-11-21` — створений 21.11.2026.
+
+**Нову копію за рішенням власника не створювати**. Однак назва резервного проєкту та метадані не доводять, що він містить точно той самий код або дозволи, що діючий deployment. Перед оновленням перевірити `Code.gs` та `appsscript.json` в обох проектах через редактор, чинну версію deployment і можливість повернення до неї. Користувацькі URL не дають автоматичної авторизації Apps Script API; Google Drive connector не може читати чи змінювати `Code.gs`, Script Properties або deployments. Не проголошувати v0.5 deployed без browser/API readback.
+
 ## 1a. Альтернатива за рішенням власника: оновлення без окремої копії
 
 > Користувач свідомо обрав **не створювати окремий резервний проєкт**. Це не прибирає ризик втрати останніх змін або налаштувань. Дотримуйтесь цього шляху лише за умови, що можна вибрати **попередню версію того самого deployment**. Жодного додаткового Google Drive файлу або Apps Script проєкту цей шлях не створює.
