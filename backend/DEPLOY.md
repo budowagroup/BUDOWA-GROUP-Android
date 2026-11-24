@@ -1,8 +1,16 @@
 # BUDOWA GROUP — safe TEST-only Apps Script deployment
 
-**Current status (21.11.2026):** Flutter Android build [#49](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885185423) passed. The server implementation is prepared; separate read-only regression checks run in the backend workflow. **The existing deployed Apps Script verified on the tablet was v0.4 (read-only)**. Updating GitHub does not automatically update Apps Script. Updating GitHub does not automatically update Apps Script.
+**Current status (21.11.2026):** Flutter Android build [#49](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885185423) passed. The server implementation is prepared; separate read-only regression checks run in the backend workflow. **The existing deployed Apps Script verified on the tablet was v0.4 (read-only)**. Updating GitHub does not automatically update Apps Script.
 
 The source is **backend/Code.gs**, with automated checks in **backend/tests.js**. Do not deploy an untested or partially copied file.
+
+## 0. Check the archived v0.4 package and OAuth scope migration
+
+- Google Drive folder **BUDOWA GROUP — Android API** contains `BUDOWA_GROUP_Apps_Script_v0_4.zip` (saved **17.11.2026**). This archive contains a v0.4 `Code.gs`, `appsscript.json` and README, and is useful as a source-code reference.
+- **An old ZIP is not proof of a snapshot of the currently deployed Apps Script project**. It does not preserve current Script Properties, deployment ID, authorization grants, or the precise currently deployed version. The separate rollback copy of the **actual live project** in section 1 remains mandatory.
+- The v0.4 package manifest explicitly requests `https://www.googleapis.com/auth/spreadsheets.readonly`. That scope is insufficient for `setValue`, `insertSheet` and other v0.5 write operations.
+- The version-controlled v0.5 `backend/appsscript.json` intentionally requests `https://www.googleapis.com/auth/spreadsheets` plus `https://www.googleapis.com/auth/script.external_request`. The project owner must review and explicitly grant the new authorization in the Apps Script editor **before attempting live TEST write operations**. Leave `ENABLE_TEST_WRITES=false` until staging checks pass.
+- The original v0.4 template includes **three** administrator slots. The current requirement is **two** admins. Confirm the exact two active accounts privately against the actual live project before setting `READ_ONLY_ADMINS`; do not blindly copy the archived list or publish addresses.
 
 ## 1. Make a v0.4 rollback copy first (Android tablet supported)
 
@@ -22,7 +30,11 @@ In **Project Settings → Script properties**:
 - `READ_ONLY_ADMINS`: **required to preserve the original v0.4 admin read access**. Set to a comma-separated list of *exactly* the former `admins` emails from the old `BG` configuration. They will only be able to read.
 - `ENABLE_TEST_WRITES`: set to `false` for the first deployment. It fails closed if absent.
 
-**Gate before deployment:** latest backend tests must pass; `READ_ONLY_ADMINS` and `GOOGLE_OAUTH_CLIENT_ID` must be configured and privately verified, `ENABLE_TEST_WRITES=false`, rollback copy confirmed. Then replace the **single** existing Code.gs / Kod.gs body with the complete contents of `backend/Code.gs`. Do not add two `doPost` functions.
+**Gate before deployment:** latest backend tests must pass; `READ_ONLY_ADMINS` and `GOOGLE_OAUTH_CLIENT_ID` must be configured and privately verified, `ENABLE_TEST_WRITES=false`, rollback copy confirmed.
+
+Then replace the **single** existing `Code.gs` / `Kod.gs` body with the complete contents of `backend/Code.gs`. Do not add two `doPost` functions.
+
+In **Project Settings**, enable *Show "appsscript.json" manifest file in editor* if necessary; copy the full `backend/appsscript.json` into the existing project's manifest. Verify the **read/write Sheets scope** and the external-request scope before deployment. Do **not** retain the old `spreadsheets.readonly`-only manifest. Because permissions are changing, the script owner must authorize the new scopes in Apps Script (approve only after verifying the project is TEST-only and the target IDs are correct). The broader OAuth scope is authorized for the project owner, **not** as a grant to arbitrary API callers; token and role gates in the source still apply. If authorization is not verified, stop; do not enable writes.
 
 Go to **Deploy → Manage deployments → Edit → New version → Deploy**. Keep the existing Web App deployment, Execute as **Me**, Who has access **Anyone**. The server validates Google ID tokens and email; Google Sheets remain inaccessible to unknown callers. The original `/exec` address should remain unchanged when modifying the existing deployment; if changed, update the GitHub Actions secret `APPS_SCRIPT_URL` and rebuild.
 
@@ -46,6 +58,14 @@ The property is evaluated server-side on each request; sign out/in on Android to
 - Finance: `1l5eB0EafcIBfwosO_o5s6TYiUOvqek6uuo037DoHeGk`
 
 No original workbook identifiers are present as writable targets.
+
+## 3a. Verify runtime permissions and unchanged deployment
+
+1. Keep `ENABLE_TEST_WRITES=false` and verify `health` reports `version=0.5`, `dataSource=BG TEST Android API`, `capabilities.write=false`.
+2. Confirm nine read endpoints and Android connectivity as owner and both admins; outsider requests must return `FORBIDDEN`.
+3. Inspect Apps Script **Executions** for missing-scope, authorization, and `UrlFetchApp` errors; confirm Google authorization was granted in the editor by the owner.
+4. Validate the TEST spreadsheet IDs match the intended workbook pair. Do not silently replace them with the later 20.11 TEST copies.
+5. Preserve the existing deployment ID and `/exec` URL; if either changed, rebuild APK only after the Android secret configuration has been updated securely.
 
 ## 4. Controlled acceptance tests (on TEST)
 

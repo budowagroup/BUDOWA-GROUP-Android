@@ -15,5 +15,6 @@ jobs:
       - uses: actions/checkout@v4
       - name: Run backend regression tests (no Google Sheets writes)
         run: |
+          node backend/manifest-tests.js
           node backend/tests.js
           node backend/write-tests.js

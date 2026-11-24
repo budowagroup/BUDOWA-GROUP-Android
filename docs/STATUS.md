@@ -49,6 +49,14 @@
 - **Реальний сервер:** живе розгортання v0.5 не підтверджене; запис CREATE/UPDATE з Android у TEST Google Sheets не перевірений. Прапорець `ENABLE_TEST_WRITES` не вмикати до безпечного read-only rollout.
 - Жодної зміни в оригіналах або backup-автоматизаціях під час розробки не зроблено.
 
+## Додаткова перевірка GitHub + Drive 24.11.2026
+
+- Відкрито ZIP `BUDOWA_GROUP_Apps_Script_v0_4.zip` у папці Google Drive проєкту. Це архів вихідного коду v0.4 з маніфестом **лише читання**, а не підтверджена копія актуального deployed Apps Script та його налаштувань.
+- Для v0.5 додано `backend/appsscript.json` з повним Sheets scope (`spreadsheets`) і `script.external_request`. У CI додано `backend/manifest-tests.js`, що перевіряє scope, TEST-only обмеження та `ENABLE_TEST_WRITES` (fail-closed).
+- В архіві v0.4 згадано три адмін-акаунти, тоді як актуальна вимога — **два**. Фактичні акаунти звіряються тільки приватно; у публічні коміти їхні адреси не переносити.
+- Оновлено `backend/DEPLOY.md`: для власника обов'язкова перевірка live backup, OAuth переавторизація у редакторі, запуск read-only v0.5, а тільки потім E2E TEST запис.
+- Прямий доступ до Apps Script deployment з GitHub та Google Drive **відсутній**; оновлення джерельного коду не означає зміну робочого сервера.
+
 ## У роботі — P0
 
 | Пріоритет | Завдання | Доказ / стан |
