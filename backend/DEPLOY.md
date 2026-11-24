@@ -12,6 +12,20 @@ The source is **backend/Code.gs**, with automated checks in **backend/tests.js**
 - The version-controlled v0.5 `backend/appsscript.json` intentionally requests `https://www.googleapis.com/auth/spreadsheets` plus `https://www.googleapis.com/auth/script.external_request`. The project owner must review and explicitly grant the new authorization in the Apps Script editor **before attempting live TEST write operations**. Leave `ENABLE_TEST_WRITES=false` until staging checks pass.
 - The original v0.4 template includes **three** administrator slots. The current requirement is **two** admins. Confirm the exact two active accounts privately against the actual live project before setting `READ_ONLY_ADMINS`; do not blindly copy the archived list or publish addresses.
 
+## 1a. Альтернатива за рішенням власника: оновлення без окремої копії
+
+> Користувач свідомо обрав **не створювати окремий резервний проєкт**. Це не прибирає ризик втрати останніх змін або налаштувань. Дотримуйтесь цього шляху лише за умови, що можна вибрати **попередню версію того самого deployment**. Жодного додаткового Google Drive файлу або Apps Script проєкту цей шлях не створює.
+
+1. У діючому Apps Script обрати **Deploy → Manage deployments**. До редагування підтвердити наявність чинного deployment, його **версії** та можливості повернути попередню через **Edit → Version**. Переконатися, що ідентифікатор deployment та адреса `/exec` залишаться тими самими. **Якщо попередню версію неможливо вибрати — зупинитися**, інакше відкат без копії ненадійний.
+2. Звірити чинний `Code.gs` з відомим архівом `BUDOWA_GROUP_Apps_Script_v0_4.zip` від 17.11.2026. Архів може бути застарілим: це **не доказ ідентичності фактично розгорнутого коду**. Приватно перевірити точні два активні admin акаунти та `GOOGLE_OAUTH_CLIENT_ID`; не надсилати їх у чат і не комітити.
+3. Під час налаштування Script Properties поставити `ENABLE_TEST_WRITES=false`; `READ_ONLY_ADMINS` — тільки підтверджені два адресати, `GOOGLE_OAUTH_CLIENT_ID` — тільки підтверджений OAuth Web Client ID. За відсутності цих даних **не виконувати розгортання**.
+4. Після успішного GitHub backend CI змінити **поточний** `Code.gs` на `backend/Code.gs`, а поточний manifest — на `backend/appsscript.json` (потрібні `spreadsheets` і `script.external_request`). Нові дозволи необхідно авторизувати особисто власнику Google-акаунту.
+5. Відредагувати **існуючий**, не новий deployment: **Deploy → Manage deployments → Edit → New version → Deploy**. Не вибирати **New deployment**, якщо хочемо зберегти стару адресу Android.
+6. Повторно увійти в APK: сервер має відповідати `version=0.5`, `dataSource=BG TEST Android API`, `capabilities.write=false`, owner і два admin мають читати всі 9 вкладок; admin не можуть писати, сторонні не мають доступу. Якщо щось не працює — через **Manage deployments → Edit** повернути **попередню версію** цього самого deployment. Після відкату можуть знадобитися старі Script Properties і підтвердження OAuth.
+7. **Тільки після успішної перевірки** можна змінити `ENABLE_TEST_WRITES=true` і перевірити контрольне додавання/редагування **виключно в TEST**. Для аварійного вимкнення одразу повернути `false`.
+
+**Обмеження:** GitHub та Google Drive не дають у цьому чаті інструмента для редагування й розгортання Apps Script. Зміна файлів у репозиторії **не виконує** жоден із кроків 1–7 у live проєкті. Не заявляти, що запис у Sheets увімкнений, доки це не підтверджено E2E.
+
 ## 1. Make a v0.4 rollback copy first (Android tablet supported)
 
 1. On the Android tablet, open the *existing* **BUDOWA GROUP Android API** project in Chrome (⋮ → **Desktop site**, if needed). Use the account that owns this project.
