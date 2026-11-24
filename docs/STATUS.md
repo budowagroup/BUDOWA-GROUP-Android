@@ -64,6 +64,12 @@
 - Стан P0 #3 тепер: backup-проєкт знайдено, код v0.5 підготовлено/CI перевірено; залишилися перевірка чинних властивостей та доступів, OAuth consent, створення нової версії **того самого** deployment і read-only регресія на планшеті. **Live deployment не змінено.**
 - Далі P0 #4: тільки після read-only перевірок увімкнути `ENABLE_TEST_WRITES=true` для власника та провести реальний CREATE/UPDATE у TEST. Оригінальні таблиці і backup-автоматизації не змінювати.
 
+## Перевірка чинного маніфесту за скриншотом 24.11.2026
+
+- Фактичний `appsscript.json` основного Apps Script містить `webapp.executeAs=USER_DEPLOYING` і `webapp.access=ANYONE_ANONYMOUS`, а також `dependencies={}`, часовий пояс Варшави та V8. Явного `oauthScopes` немає — на відміну від архівного manifest v0.4, не можна стверджувати, що живий manifest явно обмежений `spreadsheets.readonly`.
+- У `backend/appsscript.json` v0.5 **збережено фактичний блок Web App** та додано явні scopes для Google Sheets і UrlFetchApp. В `backend/manifest-tests.js` додано автоматичні assert для цих налаштувань.
+- Наразі маніфест та код **тільки в GitHub**. Живий Apps Script не змінювався і `ENABLE_TEST_WRITES=false`.
+
 ## У роботі — P0
 
 | Пріоритет | Завдання | Доказ / стан |

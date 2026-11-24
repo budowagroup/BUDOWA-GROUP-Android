@@ -4,6 +4,22 @@
 
 The source is **backend/Code.gs**, with automated checks in **backend/tests.js**. Do not deploy an untested or partially copied file.
 
+## Live project manifest verified from user screenshot — 24.11.2026
+
+The **actual working** `appsscript.json` (not the archived ZIP) contains:
+`timeZone=Europe/Warsaw`, `dependencies={}`, `exceptionLogging=STACKDRIVER`,
+`runtimeVersion=V8`, and `webapp: {executeAs:USER_DEPLOYING, access:ANYONE_ANONYMOUS}`.
+**It does not explicitly list `oauthScopes`.** This is different from the older ZIP's
+read-only manifest: Apps Script can auto-detect scopes when `oauthScopes` is absent.
+
+The GitHub v0.5 manifest **preserves the live Web App configuration** and adds
+explicit `spreadsheets` and `script.external_request` scopes. **Never paste a
+manifest without the `webapp` section**: that can break the existing Web App.
+Copy both `backend/appsscript.json` and `backend/Code.gs` only as part of a
+staged rollout with `ENABLE_TEST_WRITES=false`; new OAuth authorization may be needed.
+The existing deployment still requires a new **version** (not a new deployment)
+to use the updated files.
+
 ## 0. Check the archived v0.4 package and OAuth scope migration
 
 - Google Drive folder **BUDOWA GROUP — Android API** contains `BUDOWA_GROUP_Apps_Script_v0_4.zip` (saved **17.11.2026**). This archive contains a v0.4 `Code.gs`, `appsscript.json` and README, and is useful as a source-code reference.
