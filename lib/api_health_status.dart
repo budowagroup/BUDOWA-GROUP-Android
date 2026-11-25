@@ -21,7 +21,7 @@ class ApiHealthStatus {
 
     final capabilities = response['capabilities'];
     final canWrite = role == 'owner' &&
-        response['version'] == '0.5' &&
+        (response['version'] == '0.5' || response['version'] == '0.6') &&
         response['dataSource'] == 'BG TEST Android API' &&
         capabilities is Map &&
         capabilities['write'] == true &&

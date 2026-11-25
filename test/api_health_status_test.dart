@@ -21,6 +21,15 @@ void main() {
     expect(health.dataSource, 'BG TEST Android API');
   });
 
+  test('v0.6 owner recognizes TEST-only explicit write capabilities', () {
+    final health = ApiHealthStatus.fromResponse({
+      'ok': true, 'role': 'owner', 'version': '0.6',
+      'dataSource': 'BG TEST Android API',
+      'capabilities': {'write': true, 'create': true, 'update': true},
+    });
+    expect(health.canWriteTest, isTrue);
+  });
+
   test('admin is always read-only despite server write flags', () {
     final health = ApiHealthStatus.fromResponse({
       'ok': true, 'role': 'admin', 'version': '0.5',
