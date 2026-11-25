@@ -5,6 +5,10 @@ import 'package:budowa_group/hours_entry_form.dart';
 void main() {
   testWidgets('finance operations use reference dropdowns and object colors',
       (tester) async {
+    tester.view.physicalSize = const Size(1000, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(home: FinanceTabDraftForm(
       tab: 'Операції',
       options: const {2: ['Тестовий покупець'], 6: ['Тестова категорія'],
