@@ -437,7 +437,7 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
     final optional = column != 2 && column != 4;
     final items = <String>[if (optional) '', ...choices];
     Color? operationColor(String value) => column != 4 ? null :
-        value == 'Надходження' ? const Color(0xFF176B4D) : const Color(0xFFAD3C32);
+        value == 'Надходження' ? const Color(0xFFD9EAD3) : Colors.white;
     Widget option(String value) => Row(children: [
       if ((column == 7 || column == 4) && value.isNotEmpty) ...[
         Container(width: 20, height: 20, decoration: BoxDecoration(
@@ -447,7 +447,7 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
         const SizedBox(width: 8),
       ],
       Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
-        style: TextStyle(color: operationColor(value)),
+        style: TextStyle(color: column == 4 ? Colors.black87 : null),
         overflow: TextOverflow.ellipsis)),
     ]);
     return DropdownButtonFormField<String>(
