@@ -110,6 +110,8 @@ test('success needs valid session and invalidation follows credential change',()
   assert.equal(call({idToken:'first',action:'read',adminSession:session}).error,'ADMIN_PIN_REQUIRED');
 });
 test('rate limiting blocks after five wrong attempts',()=>{
+  // Start a fresh throttle window: an earlier isolation test tried a wrong PIN.
+  delete props['ADMIN_PIN_THROTTLE_'+ctx.bgPinKey_('second@example.test')];
   for(let i=0;i<4;i++){
     assert.equal(call({idToken:'second',action:'adminPinLogin',adminPin:'invalid-seven'}).error,'ADMIN_PIN_INVALID');
   }
