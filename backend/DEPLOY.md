@@ -1,3 +1,7 @@
+## Додаткові паролі адміністраторів — наступний реліз v0.6
+
+Після успішної read-only перевірки v0.5 для підключення паролів двох адміністраторів використовуй **окрему покрокову інструкцію** `backend/ADMIN_PIN_SETUP.md`. Нова серверна версія складається з **двох** Apps Script файлів: `Code.gs` та `AdminPin.gs`. Копіювання одного `Code.gs` недостатнє. Новий Android-клієнт 0.3.3+8 блокує вхід адміністраторів, якщо сервер не підтверджує PIN. Власник і `ENABLE_TEST_WRITES=false` лишаються без змін.
+
 # BUDOWA GROUP — safe TEST-only Apps Script deployment
 
 **Current status (21.11.2026):** Flutter Android build [#49](https://github.com/budowagroup/BUDOWA-GROUP-Android/actions/runs/44885185423) passed. The server implementation is prepared; separate read-only regression checks run in the backend workflow. **The existing deployed Apps Script verified on the tablet was v0.4 (read-only)**. Updating GitHub does not automatically update Apps Script.
