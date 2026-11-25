@@ -17,4 +17,5 @@ jobs:
         run: |
           node backend/manifest-tests.js
           node backend/tests.js
+          node backend/admin-pin-tests.js
           node backend/write-tests.js

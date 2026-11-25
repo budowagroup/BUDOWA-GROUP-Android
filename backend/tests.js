@@ -3,7 +3,7 @@
 const fs=require('node:fs');
 const vm=require('node:vm');
 const assert=require('node:assert/strict');
-const source=fs.readFileSync(__dirname+'/Code.gs','utf8');
+const source=fs.readFileSync(__dirname+'/Code.gs','utf8')+'\n'+fs.readFileSync(__dirname+'/AdminPin.gs','utf8');
 const props={
   GOOGLE_OAUTH_CLIENT_ID:'test.apps.googleusercontent.com',
   ENABLE_TEST_WRITES:'false',
@@ -59,6 +59,8 @@ test('cannot edit calculated payroll',()=>fails(
   ()=>ctx.bgTarget_({book:'hours',tab:'Розрахунок'},true),'CALCULATED_TAB_READ_ONLY'));
 test('invalid tab rejected',()=>fails(
   ()=>ctx.bgTarget_({book:'hours',tab:'Fake'},false),'INVALID_TAB'));
+// Other tests assert role permissions; admin PIN gate is exercised in admin-pin-tests.js.
+ctx.bgAdminSessionValid_=()=>true;
 ctx.bgVerify_=idToken=>({email:idToken==='owner'
   ?'biuro.budowa.group@gmail.com'
   :idToken==='admin'?'admin@example.com':'stranger@example.com'});
@@ -135,7 +137,7 @@ test('read-only deployment flag rejects both create and update',()=>{
 test('owner write flag defaults off',()=>{
   const r=call({idToken:'owner',action:'health'});
   assert.equal(r.ok,true);assert.equal(r.capabilities.write,false);
-  assert.equal(r.version,'0.5');
+  assert.equal(r.version,'0.6');
   assert.equal(r.dataSource,'BG TEST Android API');
 });
 test('owner write rejected when off',()=>{
