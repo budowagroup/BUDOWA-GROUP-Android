@@ -100,6 +100,32 @@ class _BudowaAppState extends State<BudowaApp> {
       }.contains(tab)
       : <String>{'Операції', 'Закупівельники', 'Довідники'}.contains(tab);
 
+  Future<void> openFinanceDraft() async {
+    if (busy || account == null) return;
+    final activeAccount = account!;
+    final selectedTab = tab;
+    if (selectedTab != 'Операції') {
+      await navigation.push<void>(FinanceTabDraftForm(tab: selectedTab));
+      return;
+    }
+    setState(() { busy = true; error = null; });
+    try {
+      final tokenValue = (await activeAccount.authentication).idToken;
+      if (tokenValue == null) throw Exception('Не вдалося оновити авторизацію');
+      final options = await loadLookupOptions(
+        'finance', selectedTab, (payload) => request(payload, tokenValue),
+      );
+      if (!mounted || account != activeAccount) return;
+      await navigation.push<void>(FinanceTabDraftForm(
+        tab: selectedTab, options: options, objectColor: siteColor,
+      ));
+    } catch (exception) {
+      if (mounted) setState(() => error = '$exception');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> openRecordEditor([List<String>? existing]) async {
     if (!canWriteTest || !editableTab || busy) return;
     final selectedBook = book;
@@ -143,6 +169,7 @@ class _BudowaAppState extends State<BudowaApp> {
           sheetRow: actualRow,
           original: existing,
           options: options,
+          objectColor: siteColor,
           onSave: (values, requestId) async {
             final user = account;
             if (user == null || user != activeAccount) {
@@ -878,10 +905,10 @@ class _BudowaAppState extends State<BudowaApp> {
                           Expanded(child: OutlinedButton.icon(
                             onPressed: busy ? null : canWriteTest && editableTab
                               ? () => openRecordEditor()
-                              : () => navigation.push<void>(
-                                  book == 'finance'
-                                    ? FinanceTabDraftForm(tab: tab)
-                                    : tab == 'Робочі години'
+                              : book == 'finance'
+                                ? openFinanceDraft
+                                : () => navigation.push<void>(
+                                    tab == 'Робочі години'
                                       ? const HoursEntryForm()
                                       : HoursTabDraftForm(tab: tab)),
                             icon: Icon(canWriteTest && editableTab
