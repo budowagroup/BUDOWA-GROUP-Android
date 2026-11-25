@@ -6,6 +6,7 @@ void main() {
     final specs = lookupSpecsFor('hours', 'Робочі години');
     expect(specs.map((s) => s.formColumn).toList(), [1, 2]);
     expect(specs.map((s) => s.tab).toList(), ['Працівники', 'Обʼєкти']);
+    expect(specs.map((s) => s.sourceColumn).toList(), [5, 4]);
   });
 
   test('financial operations use buyer and two distinct directory columns', () {
@@ -43,6 +44,18 @@ void main() {
     expect(choices[2], ['Ігор', 'Роман']);
     expect(choices[6], ['Матеріали', 'Інструменти']);
     expect(choices[7], ['Łomianki', 'Rembertow']);
+  });
+
+  test('only active helper columns and payment month choices are used', () async {
+    final choices = await loadLookupOptions('hours', 'Робочі години', (payload) async {
+      return {'ok': true, 'rows': payload['tab'] == 'Працівники'
+        ? [['Inactive', '', '', 'Ні', '', 'Active']]
+        : [['Inactive project', '', 'Ні', '', 'Active project']]};
+    });
+    expect(choices[1], ['Active']);
+    expect(choices[2], ['Active project']);
+    expect(choices[10], paymentMonths);
+    expect(choices[12], paymentMonths);
   });
 
   test('empty mandatory reference is never accepted', () async {

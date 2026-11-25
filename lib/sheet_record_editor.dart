@@ -20,7 +20,7 @@ List<TestField> testFields(String book, String tab) {
         TestField(4,'Кінець',kind:'time',required:true),
         TestField(5,'Перерва (год)',kind:'number'),
         TestField(9,'Аванс (zł)',kind:'number'),
-        TestField(10,'Місяць роботи'),
+        TestField(10,'Місяць авансу'),
         TestField(11,'Оплата (zł)',kind:'number'),
         TestField(12,'Місяць оплати'),
         TestField(14,'Примітка')];
@@ -101,9 +101,11 @@ class SheetRecordEditor extends StatefulWidget {
   final int? sheetRow;
   final List<String>? original;
   final Map<int,List<String>> options;
+  final Color Function(String)? objectColor;
+  final Color Function(int,String)? referenceColor;
   final Future<void> Function(Map<String,String> values,String requestId) onSave;
   const SheetRecordEditor({super.key,required this.book,required this.tab,
-    required this.onSave,this.sheetRow,this.original,this.options=const {}});
+    required this.onSave,this.sheetRow,this.original,this.options=const {},this.objectColor,this.referenceColor});
   @override
   State<SheetRecordEditor> createState()=>_SheetRecordEditorState();
 }
@@ -148,6 +150,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       final match=RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s);
       final d=DateTime.tryParse(s);
       if(!match||d==null||d.year<2020||d.year>2100||
+        (widget.book=='hours' && d.isBefore(DateTime(2026,8,17)))||
         '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}'!=s)
         return 'Дата РРРР-ММ-ДД';
     }
@@ -171,7 +174,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     if(f.kind=='date'){
       final chosen=await showDatePicker(context:context,
         initialDate:DateTime.tryParse(controllers[f.column]!.text)??DateTime.now(),
-        firstDate:DateTime(2020),lastDate:DateTime(2100));
+        firstDate:widget.book=='hours'?DateTime(2026,8,17):DateTime(2020),lastDate:DateTime(2100));
       if(chosen!=null)controllers[f.column]!.text=
         '${chosen.year}-${chosen.month.toString().padLeft(2,'0')}-${chosen.day.toString().padLeft(2,'0')}';
     } else {
@@ -220,6 +223,19 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       setState(()=>error='Початок і кінець роботи мають відрізнятися');
       return;
     }
+    if (widget.tab=='Робочі години') {
+      for (final pair in const [(9,10),(11,12)]) {
+        final amount=double.tryParse(testNumber(controllers[pair.$1]!.text))??0;
+        if(amount>0 && controllers[pair.$2]!.text.trim().isEmpty){
+          setState(()=>error='Оберіть місяць авансу або оплати'); return;
+        }
+      }
+      final a=controllers[3]!.text.split(':').map(int.parse).toList();
+      final b=controllers[4]!.text.split(':').map(int.parse).toList();
+      final duration=(b[0]*60+b[1]-a[0]*60-a[1]+1440)%1440;
+      final pause=double.tryParse(testNumber(controllers[5]!.text))??0;
+      if(pause*60>=duration){setState(()=>error='Перерва має бути меншою за робочий час');return;}
+    }
     final values=<String,String>{
       for(final f in fields) '${f.column}':
         f.kind=='number'||f.kind=='positive'
@@ -247,6 +263,34 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     }
   }
 
+  List<String> fieldChoices(TestField f) {
+    if (widget.options.containsKey(f.column)) {
+      return [if (!f.required) '', ...widget.options[f.column]!];
+    }
+    return f.kind == 'active' ? const ['Так','Ні'] : const ['Надходження','Витрати'];
+  }
+
+  Widget choiceLabel(TestField f, String value) {
+    final objectField = (widget.book == 'finance' && widget.tab == 'Операції' && f.column == 7)
+      || (widget.book == 'hours' && widget.tab == 'Робочі години' && f.column == 2);
+    final financeReference = widget.book=='finance' && widget.tab=='Операції' && const [2,4,6,7].contains(f.column);
+    final operationColor = f.kind != 'operation' ? null :
+        value == 'Надходження' ? const Color(0xFFD9EAD3) : Colors.white;
+    final color = financeReference ? widget.referenceColor?.call(f.column,value) ?? operationColor ?? (objectField ? widget.objectColor?.call(value) : null) ?? Colors.white : objectField ? widget.objectColor?.call(value) : null;
+    return Row(children: [
+      if (color != null && value.isNotEmpty) ...[
+        Container(width: 20, height: 20, decoration: BoxDecoration(
+          color: color,
+          border: Border.all(color: Colors.black26),
+          borderRadius: BorderRadius.circular(4))),
+        const SizedBox(width: 8),
+      ],
+      Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
+        style: TextStyle(color: f.kind == 'operation' ? Colors.black87 : null),
+        overflow: TextOverflow.ellipsis)),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(widget.sheetRow==null?'Додати — TEST':'Редагувати — TEST')),
@@ -267,11 +311,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       ...fields.map((f)=>Padding(padding:const EdgeInsets.only(bottom:12),
         child:(f.kind=='active'||f.kind=='operation'||widget.options.containsKey(f.column))
           ? DropdownButtonFormField<String>(
-              initialValue:(
-                widget.options.containsKey(f.column)
-                  ? widget.options[f.column]!
-                  : (f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
-              ).contains(controllers[f.column]!.text)
+              initialValue:fieldChoices(f).contains(controllers[f.column]!.text)
                   ? controllers[f.column]!.text : null,
               isExpanded:true,
               decoration:InputDecoration(
@@ -280,12 +320,8 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
                 helperText:widget.options.containsKey(f.column)
                     ? 'Дані з відповідного довідника Google Sheets' : null,
               ),
-              items:(
-                widget.options.containsKey(f.column)
-                  ? widget.options[f.column]!
-                  : (f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
-              ).map((s)=>DropdownMenuItem(value:s,child:Text(s,
-                  overflow:TextOverflow.ellipsis))).toList(),
+              items:fieldChoices(f).map((s)=>DropdownMenuItem(
+                value:s,child:choiceLabel(f,s))).toList(),
               onChanged:saving||isLockedName(f)?null:
                 (v){controllers[f.column]!.text=v??'';},
               validator:(v)=>check(f,v??controllers[f.column]!.text))

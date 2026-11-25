@@ -6,30 +6,31 @@ class LookupSpec {
   final String tab;
   final int sourceColumn;
   final bool required;
+  final int? lastRow;
 
   const LookupSpec(
     this.formColumn, this.book, this.tab, this.sourceColumn, {
-    this.required = false,
+    this.required = false, this.lastRow,
   });
 }
 
 List<LookupSpec> lookupSpecsFor(String book, String tab) {
   if (book == 'hours' && tab == 'Робочі години') {
     return const [
-      LookupSpec(1, 'hours', 'Працівники', 0, required: true),
-      LookupSpec(2, 'hours', 'Обʼєкти', 0, required: true),
+      LookupSpec(1, 'hours', 'Працівники', 5, required: true, lastRow: 53),
+      LookupSpec(2, 'hours', 'Обʼєкти', 4, required: true, lastRow: 53),
     ];
   }
   if (book == 'hours' && tab == 'Історія ставок') {
     return const [
-      LookupSpec(0, 'hours', 'Працівники', 0, required: true),
+      LookupSpec(0, 'hours', 'Працівники', 0, required: true, lastRow: 53),
     ];
   }
   if (book == 'finance' && tab == 'Операції') {
     return const [
-      LookupSpec(2, 'finance', 'Закупівельники', 0, required: true),
-      LookupSpec(6, 'finance', 'Довідники', 0),
-      LookupSpec(7, 'finance', 'Довідники', 1),
+      LookupSpec(2, 'finance', 'Закупівельники', 0, required: true, lastRow: 103),
+      LookupSpec(6, 'finance', 'Довідники', 0, lastRow: 51),
+      LookupSpec(7, 'finance', 'Довідники', 1, lastRow: 53),
     ];
   }
   return const [];
@@ -88,7 +89,7 @@ Future<Map<int, List<String>>> loadLookupOptions(
   for (final spec in specs) {
     final source = cached['${spec.book}/${spec.tab}']!;
     final seen = <String>{};
-    for (final row in source) {
+    for (final row in source.take(spec.lastRow == null ? source.length : spec.lastRow! - 3)) {
       final value = spec.sourceColumn < row.length
           ? (row[spec.sourceColumn] ?? '').toString().trim()
           : '';
@@ -101,5 +102,13 @@ Future<Map<int, List<String>>> loadLookupOptions(
     }
     result[spec.formColumn] = options;
   }
+  if (book == 'hours' && tab == 'Робочі години') {
+    result[10] = paymentMonths;
+    result[12] = paymentMonths;
+  }
   return result;
 }
+
+// Exact current validation values in K/M of the reference spreadsheet.
+const paymentMonths = ['СЕРПЕНЬ 2026', 'ВЕРЕСЕНЬ 2026', 'ЖОВТЕНЬ 2026',
+  'ЛИСТОПАД 2026', 'ГРУДЕНЬ 2026'];

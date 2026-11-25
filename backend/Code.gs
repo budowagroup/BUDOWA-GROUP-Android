@@ -73,6 +73,10 @@ function doPost(e) {
       if (request.includeMeta === true) {
         readResult.lastDataRow=bgLastDataRow_(request);
       }
+      if (request.includePresentation === true) {
+        try { readResult.presentation=bgPresentation_(request); }
+        catch (presentationError) { readResult.presentationError='PRESENTATION_UNAVAILABLE'; }
+      }
       return bgOutput_(readResult);
     }
     if (request.action === 'history') {
@@ -153,6 +157,62 @@ function bgRead_(request) {
   var count = Math.min(limit,target.sheet.getMaxRows()-start+1);
   return target.sheet.getRange(start,1,count,cfg.width).getDisplayValues();
 }
+// Read presentation metadata only from the configured TEST workbooks.
+// Match exact-value conditional formatting rules without evaluating formulas.
+function bgExactColors_(sheet,column) {
+  var out=Object.create(null);
+  var letter=String.fromCharCode(64+column);
+  sheet.getConditionalFormatRules().forEach(function(rule){
+    var condition=rule.getBooleanCondition();
+    if (!condition || !rule.getRanges().some(function(range){
+      return range.getColumn()<=column && range.getLastColumn()>=column;
+    })) return;
+    var match=/^=\s*\$?([A-Z])\$?\d+\s*=\s*"((?:[^"]|"")*)"\s*$/i.exec(String(condition.getCriteriaValues()[0]||''));
+    var color=condition.getBackground();
+    if(match && match[1].toUpperCase()===letter && /^#[a-f0-9]{6}$/i.test(String(color||''))) {
+      var name=match[2].replace(/""/g,'"');
+      if(!Object.prototype.hasOwnProperty.call(out,name)) out[name]=color;
+    }
+  });
+  return out;
+}
+function bgReferenceColors_(sheet,range) {
+  var cells=sheet.getRange(range), values=cells.getDisplayValues(), colors=cells.getBackgrounds();
+  var result=Object.create(null);
+  for(var i=0;i<values.length;i++) {
+    var name=String(values[i][0]||'').trim(),color=colors[i][0];
+    if(name && /^#[a-f0-9]{6}$/i.test(String(color||''))) result[name]=color;
+  }
+  return result;
+}
+function bgMonthChoices_(sheet,column) {
+  var rule=sheet.getRange(4,column).getDataValidation();
+  if(!rule || rule.getCriteriaType()!==SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) throw new Error('MISSING_MONTH_VALIDATION');
+  return rule.getCriteriaValues()[0].map(String);
+}
+function bgPresentation_(request) {
+  var target=bgTarget_(request,false);
+  var hours=target.book==='hours'?target.spreadsheet:SpreadsheetApp.openById(BG_TEST.ids.hours);
+  var finance=target.book==='finance'?target.spreadsheet:SpreadsheetApp.openById(BG_TEST.ids.finance);
+  var work=hours.getSheetByName('Робочі години');
+  var ops=finance.getSheetByName('Операції');
+  var dirs=finance.getSheetByName('Довідники');
+  var projects=bgExactColors_(work,3);
+  var financeProjects=bgExactColors_(ops,8);
+  Object.keys(financeProjects).forEach(function(k){projects[k]=financeProjects[k];});
+  var operationColors=bgExactColors_(ops,5);
+  if(!operationColors['Витрати']) {
+    var vals=ops.getRange(4,5,Math.max(1,ops.getLastRow()-3),1);
+    var values=vals.getDisplayValues(), backgrounds=vals.getBackgrounds();
+    for(var i=0;i<values.length;i++) if(values[i][0]==='Витрати') {
+      operationColors['Витрати']=backgrounds[i][0];break;
+    }
+  }
+  return {objectColors:projects,operationColors:operationColors,
+    buyerColors:bgReferenceColors_(finance.getSheetByName('Закупівельники'),'A4:A103'),
+    categoryColors:bgReferenceColors_(dirs,'A4:A51'),
+    advanceMonths:bgMonthChoices_(work,11),paymentMonths:bgMonthChoices_(work,13)};
+}
 function bgLastDataRow_(request) {
   var target=bgTarget_(request,false);
   var sheet=target.sheet,cfg=target.cfg;
@@ -219,12 +279,12 @@ function bgValue_(target,index,raw) {
   var v=bgText_(raw);
   var book=target.book,tab=target.tab;
   if (book==='hours' && tab==='Робочі години') {
-    if (index===0) return bgDateValue_(v,target.spreadsheet);
+    if (index===0) { if (v<'2026-08-17') throw new Error('INVALID_DATE'); return bgDateValue_(v,target.spreadsheet); }
     if (index===3 || index===4) return bgTime_(v);
     if (index===5 || index===9 || index===11) return v===''? '':bgNumber_(v,false);
   }
   if (book==='hours' && tab==='Історія ставок') {
-    if (index===1) return bgDateValue_(v,target.spreadsheet);
+    if (index===1) { if (v<'2026-08-17') throw new Error('INVALID_DATE'); return bgDateValue_(v,target.spreadsheet); }
     if (index===2) return bgNumber_(v,true);
   }
   if (book==='finance' && tab==='Операції') {
@@ -248,7 +308,7 @@ function bgValidateRefs_(target,values) {
   if (target.book==='hours' && (target.tab==='Робочі години' ||
       target.tab==='Історія ставок')) {
     var employees=target.spreadsheet.getSheetByName('Працівники')
-      .getRange('A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
+      .getRange(target.tab==='Робочі години'?'F4:F53':'A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
     var employeeName=target.tab==='Робочі години' ? values['1'] : values['0'];
     if (employees.indexOf(employeeName)<0) {
       throw new Error('EMPLOYEE_NOT_FOUND');
@@ -256,8 +316,15 @@ function bgValidateRefs_(target,values) {
   }
   if (target.book==='hours' && target.tab==='Робочі години') {
     var sites=target.spreadsheet.getSheetByName('Обʼєкти')
-      .getRange('A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
+      .getRange('E4:E53').getDisplayValues().map(function(r){return r[0].trim();});
     if (sites.indexOf(values['2'])<0) throw new Error('PROJECT_NOT_FOUND');
+    [[9,10],[11,12]].forEach(function(pair){
+      var month=String(values[String(pair[1])]||'').trim();
+      var rule=target.sheet.getRange(4,pair[1]+1).getDataValidation();
+      if (!rule || rule.getCriteriaType()!==SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) throw new Error('MISSING_MONTH_VALIDATION');
+      var allowed=rule.getCriteriaValues()[0];
+      if ((month && allowed.indexOf(month)<0) || (Number(values[String(pair[0])]||0)>0 && !month)) throw new Error('INVALID_PAYMENT_MONTH');
+    });
     if (values['3']===values['4']) throw new Error('INVALID_HOURS');
     var st=bgTime_(values['3']),en=bgTime_(values['4']);
     var duration=(en-st+1)%1*24;
@@ -267,16 +334,16 @@ function bgValidateRefs_(target,values) {
   }
   if (target.book==='finance' && target.tab==='Операції') {
     var buyers=target.spreadsheet.getSheetByName('Закупівельники')
-      .getRange('A4:A200').getDisplayValues().map(function(r){return r[0].trim();});
+      .getRange('A4:A103').getDisplayValues().map(function(r){return r[0].trim();});
     if (buyers.indexOf(values['2'])<0) throw new Error('BUYER_NOT_FOUND');
     if (values['7']) {
       var projects=target.spreadsheet.getSheetByName('Довідники')
-        .getRange('B4:B101').getDisplayValues().map(function(r){return r[0].trim();});
+        .getRange('B4:B53').getDisplayValues().map(function(r){return r[0].trim();});
       if (projects.indexOf(values['7'])<0) throw new Error('PROJECT_NOT_FOUND');
     }
     if (values['6']) {
       var cats=target.spreadsheet.getSheetByName('Довідники')
-        .getRange('A4:A101').getDisplayValues().map(function(r){return r[0].trim();});
+        .getRange('A4:A51').getDisplayValues().map(function(r){return r[0].trim();});
       if (cats.indexOf(values['6'])<0) throw new Error('CATEGORY_NOT_FOUND');
     }
   }

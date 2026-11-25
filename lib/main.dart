@@ -5,6 +5,7 @@ import 'read_only_diagnostics.dart';
 import 'hours_entry_form.dart';
 import 'sheet_record_editor.dart';
 import 'edit_reference_data.dart';
+import 'sheet_presentation.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -53,6 +54,7 @@ class _BudowaAppState extends State<BudowaApp> {
   List<List<String>> rows = [];
   List<int> sheetRowNumbers = [];
   bool canWriteTest = false;
+  SheetPresentation presentation = SheetPresentation.snapshot;
 
   // Labels verified against the TEST sheets' actual header rows.
   List<String> get columnLabels {
@@ -100,6 +102,55 @@ class _BudowaAppState extends State<BudowaApp> {
       }.contains(tab)
       : <String>{'Операції', 'Закупівельники', 'Довідники'}.contains(tab);
 
+  Future<SheetPresentation> readPresentation(String selectedBook, String selectedTab, String idToken) async {
+    final firstRow = selectedTab == 'Панель' ? 3 : selectedTab == 'Розрахунок' ? 5 : 4;
+    final response = await request({
+      'action':'read','book':selectedBook,'tab':selectedTab,
+      'start':firstRow,'limit':1,'includePresentation':true,
+    },idToken);
+    return SheetPresentation.fromResponse(response);
+  }
+
+  void applyMonthOptions(String selectedBook, String selectedTab, Map<int,List<String>> options, SheetPresentation palette) {
+    if (selectedBook == 'hours' && selectedTab == 'Робочі години') {
+      options[10] = palette.advanceMonths;
+      options[12] = palette.paidMonths;
+    }
+  }
+
+  Future<void> openLocalDraft() async {
+    if (busy || account == null) return;
+    final activeAccount = account!;
+    final selectedTab = tab;
+    final selectedBook = book;
+    if (selectedTab != 'Операції' && selectedTab != 'Робочі години' && selectedTab != 'Історія ставок') {
+      await navigation.push<void>(selectedBook == 'finance'
+        ? FinanceTabDraftForm(tab: selectedTab) : HoursTabDraftForm(tab: selectedTab));
+      return;
+    }
+    setState(() { busy = true; error = null; });
+    try {
+      final tokenValue = (await activeAccount.authentication).idToken;
+      if (tokenValue == null) throw Exception('Не вдалося оновити авторизацію');
+      final options = await loadLookupOptions(
+        selectedBook, selectedTab, (payload) => request(payload, tokenValue),
+      );
+      final palette = await readPresentation(selectedBook, selectedTab, tokenValue);
+      applyMonthOptions(selectedBook, selectedTab, options, palette);
+      if (!mounted || account != activeAccount) return;
+      setState(() => presentation = palette);
+      await navigation.push<void>(selectedBook == 'finance'
+        ? FinanceTabDraftForm(tab: selectedTab, options: options, objectColor: palette.objectColor, referenceColor: palette.financeColor)
+        : selectedTab == 'Робочі години'
+          ? HoursEntryForm(options: options, objectColor: palette.objectColor)
+          : HoursTabDraftForm(tab: selectedTab, options: options));
+    } catch (exception) {
+      if (mounted) setState(() => error = '$exception');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> openRecordEditor([List<String>? existing]) async {
     if (!canWriteTest || !editableTab || busy) return;
     final selectedBook = book;
@@ -136,13 +187,18 @@ class _BudowaAppState extends State<BudowaApp> {
         selectedBook, selectedTab,
         (payload) => request(payload, tokenValue),
       );
+      final palette = await readPresentation(selectedBook, selectedTab, tokenValue);
+      applyMonthOptions(selectedBook, selectedTab, options, palette);
       if (!mounted || account != activeAccount) return;
+      setState(() => presentation = palette);
       final updated = await navigation.push<bool>(SheetRecordEditor(
           book: selectedBook,
           tab: selectedTab,
           sheetRow: actualRow,
           original: existing,
           options: options,
+          objectColor: palette.objectColor,
+          referenceColor: palette.financeColor,
           onSave: (values, requestId) async {
             final user = account;
             if (user == null || user != activeAccount) {
@@ -197,15 +253,23 @@ class _BudowaAppState extends State<BudowaApp> {
     ]),
   );
 
-  Color siteColor(String name) {
-    switch (name.trim().toLowerCase()) {
-      case 'legionowo michał': return const Color(0xFFE8F6E8);
-      case 'lomyanki grzegorz': return const Color(0xFF9FC5E8);
-      case 'rembertow rafal': return const Color(0xFFFF9900);
-      case 'stare babice grzegorz': return const Color(0xFFE8EAF0);
-      case 'адміністрація': return const Color(0xFF00FF00);
-      default: return const Color(0xF5FFFFFF);
+  Color siteColor(String name) => presentation.objectColor(name);
+
+  // Ukrainian alphabet order (Unicode code-point order puts І before А).
+  int compareNames(String a, String b) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyzабвгґдеєжзиіїйклмнопрстуфхцчшщьюя';
+    final left = a.trim().toLowerCase().runes.toList();
+    final right = b.trim().toLowerCase().runes.toList();
+    int rank(int c) {
+      final char = String.fromCharCode(c);
+      final i = alphabet.indexOf(char);
+      return i >= 0 ? i : 1000 + c;
     }
+    for (var i=0; i<left.length && i<right.length; i++) {
+      final diff = rank(left[i]).compareTo(rank(right[i]));
+      if (diff != 0) return diff;
+    }
+    return left.length.compareTo(right.length);
   }
 
   Widget dataCard(List<String> record, int index) {
@@ -229,8 +293,10 @@ class _BudowaAppState extends State<BudowaApp> {
         : isWork ? cell(record,2)
         : isOperation ? cell(record,7) : '';
     return Card(
-      color: objectName.isEmpty ? const Color(0xF5FFFFFF)
-          : siteColor(objectName),
+      color: isOperation ? presentation.operationColor(cell(record,4))
+          : isWorker && cell(record,3)=='Ні' ? const Color(0xFFE06666)
+          : isSite && cell(record,2)=='Ні' ? const Color(0xFF9EC4E8)
+          : objectName.isEmpty ? const Color(0xF5FFFFFF) : siteColor(objectName),
       margin: const EdgeInsets.only(bottom: 9),
       child: Padding(
         padding: const EdgeInsets.all(13),
@@ -251,10 +317,15 @@ class _BudowaAppState extends State<BudowaApp> {
             infoLine('Тип', cell(record,4)),
           if (isOperation && cell(record,3).isNotEmpty)
             Padding(padding: const EdgeInsets.only(top: 6), child: Text(
-              cell(record,3), style: TextStyle(fontSize: 21,
-                fontWeight: FontWeight.bold,
-                color: cell(record,4)=='Витрати'
-                  ? const Color(0xFFAD3C32) : const Color(0xFF176B4D)))),
+              cell(record,3), style: const TextStyle(fontSize: 21,
+                fontWeight: FontWeight.bold, color: Colors.black87))),
+          if (isOperation && objectName.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(top: 6),
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: siteColor(objectName),
+                  border: Border.all(color: Colors.black12), borderRadius: BorderRadius.circular(4)),
+                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(objectName, style: const TextStyle(color: Colors.black87))))),
           if (canWriteTest && editableTab &&
                 !<String>{'Закупівельники', 'Довідники'}.contains(tab))
             Align(alignment: Alignment.centerRight,
@@ -267,7 +338,7 @@ class _BudowaAppState extends State<BudowaApp> {
             if (cell(record,i).isNotEmpty &&
                 i != titleColumn &&
                 !(isWork && (i==0 || i==2 || i==3 || i==4)) &&
-                !(isOperation && (i==1 || i==3 || i==4)) &&
+                !(isOperation && (i==1 || i==3 || i==4 || i==7)) &&
                 !(isWorker && i==5) &&
                 !(isSite && i==4))
               if (isCalculation) ...[
@@ -298,7 +369,7 @@ class _BudowaAppState extends State<BudowaApp> {
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold,
               color: Color(0xFF17365B)))),
         for (final value in values)
-          Card(color: const Color(0xF5FFFFFF),
+          Card(color: title == 'Об’єкти' ? siteColor(value) : const Color(0xF5FFFFFF),
             margin: const EdgeInsets.only(bottom: 6),
             child: Padding(padding: const EdgeInsets.symmetric(
               horizontal: 14, vertical: 12),
@@ -375,6 +446,13 @@ class _BudowaAppState extends State<BudowaApp> {
       final date = DateTime(year,month,day);
       return date.day==day && date.month==month && date.year==year
           ? date : null;
+    }
+    for (final records in grouped.values) {
+      records.sort((a,b) {
+        final byName = compareNames(cell(a,1),cell(b,1));
+        if (byName != 0) return byName;
+        return cell(a,3).compareTo(cell(b,3));
+      });
     }
     final dates = grouped.keys.toList()..sort((a,b) {
       final da = parseDate(a); final db = parseDate(b);
@@ -664,6 +742,7 @@ class _BudowaAppState extends State<BudowaApp> {
       final rowNumbers = <int>[];
       var reachedEnd = false;
       int? lastDataRow;
+      var palette = presentation;
       for (var page = 0; page < maxPages; page++) {
         if (!mounted || account != currentAccount ||
             book != selectedBook || tab != selectedTab) return;
@@ -671,7 +750,9 @@ class _BudowaAppState extends State<BudowaApp> {
           'action': 'read', 'book': selectedBook, 'tab': selectedTab,
           'start': startRow, 'limit': pageSize,
           if (page == 0 && (apiVersion == '0.5' || apiVersion == '0.6')) 'includeMeta': true,
+          if (page == 0) 'includePresentation': true,
         }, freshToken);
+        if (page == 0) palette = SheetPresentation.fromResponse(result);
         if (page == 0 && result['lastDataRow'] is int) {
           lastDataRow = result['lastDataRow'] as int;
         }
@@ -708,7 +789,7 @@ class _BudowaAppState extends State<BudowaApp> {
           'потрібне збільшення ліміту.');
       }
       if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
-        setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; });
+        setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; presentation = palette; });
       }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
@@ -878,12 +959,7 @@ class _BudowaAppState extends State<BudowaApp> {
                           Expanded(child: OutlinedButton.icon(
                             onPressed: busy ? null : canWriteTest && editableTab
                               ? () => openRecordEditor()
-                              : () => navigation.push<void>(
-                                  book == 'finance'
-                                    ? FinanceTabDraftForm(tab: tab)
-                                    : tab == 'Робочі години'
-                                      ? const HoursEntryForm()
-                                      : HoursTabDraftForm(tab: tab)),
+                              : openLocalDraft,
                             icon: Icon(canWriteTest && editableTab
                               ? Icons.add_circle_outline : Icons.edit_note, size: 18),
                             label: Text(canWriteTest && editableTab ? 'Додати' : 'Чернетка'),
