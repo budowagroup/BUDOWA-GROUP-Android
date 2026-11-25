@@ -23,8 +23,14 @@ void main() {
     await tester.pumpAndSettle();
     final income = find.text('Надходження').last;
     final expense = find.text('Витрати').last;
-    expect(tester.widget<Text>(income).style?.color, const Color(0xFF176B4D));
-    expect(tester.widget<Text>(expense).style?.color, const Color(0xFFAD3C32));
+    expect(tester.widget<Text>(income).style?.color, Colors.black87);
+    expect(tester.widget<Text>(expense).style?.color, Colors.black87);
+    final swatches = tester.widgetList<Container>(find.byType(Container))
+        .map((widget) => widget.decoration)
+        .whereType<BoxDecoration>()
+        .map((decoration) => decoration.color);
+    expect(swatches, contains(const Color(0xFFD9EAD3)));
+    expect(swatches, contains(Colors.white));
     await tester.tap(expense);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
