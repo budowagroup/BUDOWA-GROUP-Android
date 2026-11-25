@@ -5,6 +5,7 @@ import 'read_only_diagnostics.dart';
 import 'hours_entry_form.dart';
 import 'sheet_record_editor.dart';
 import 'edit_reference_data.dart';
+import 'sheet_presentation.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -53,6 +54,7 @@ class _BudowaAppState extends State<BudowaApp> {
   List<List<String>> rows = [];
   List<int> sheetRowNumbers = [];
   bool canWriteTest = false;
+  SheetPresentation presentation = SheetPresentation.snapshot;
 
   // Labels verified against the TEST sheets' actual header rows.
   List<String> get columnLabels {
@@ -100,6 +102,22 @@ class _BudowaAppState extends State<BudowaApp> {
       }.contains(tab)
       : <String>{'Операції', 'Закупівельники', 'Довідники'}.contains(tab);
 
+  Future<SheetPresentation> readPresentation(String selectedBook, String selectedTab, String idToken) async {
+    final firstRow = selectedTab == 'Панель' ? 3 : selectedTab == 'Розрахунок' ? 5 : 4;
+    final response = await request({
+      'action':'read','book':selectedBook,'tab':selectedTab,
+      'start':firstRow,'limit':1,'includePresentation':true,
+    },idToken);
+    return SheetPresentation.fromResponse(response);
+  }
+
+  void applyMonthOptions(String selectedBook, String selectedTab, Map<int,List<String>> options, SheetPresentation palette) {
+    if (selectedBook == 'hours' && selectedTab == 'Робочі години') {
+      options[10] = palette.advanceMonths;
+      options[12] = palette.paidMonths;
+    }
+  }
+
   Future<void> openLocalDraft() async {
     if (busy || account == null) return;
     final activeAccount = account!;
@@ -117,11 +135,14 @@ class _BudowaAppState extends State<BudowaApp> {
       final options = await loadLookupOptions(
         selectedBook, selectedTab, (payload) => request(payload, tokenValue),
       );
+      final palette = await readPresentation(selectedBook, selectedTab, tokenValue);
+      applyMonthOptions(selectedBook, selectedTab, options, palette);
       if (!mounted || account != activeAccount) return;
+      setState(() => presentation = palette);
       await navigation.push<void>(selectedBook == 'finance'
-        ? FinanceTabDraftForm(tab: selectedTab, options: options, objectColor: siteColor)
+        ? FinanceTabDraftForm(tab: selectedTab, options: options, objectColor: palette.objectColor, referenceColor: palette.financeColor)
         : selectedTab == 'Робочі години'
-          ? HoursEntryForm(options: options, objectColor: siteColor)
+          ? HoursEntryForm(options: options, objectColor: palette.objectColor)
           : HoursTabDraftForm(tab: selectedTab, options: options));
     } catch (exception) {
       if (mounted) setState(() => error = '$exception');
@@ -166,14 +187,18 @@ class _BudowaAppState extends State<BudowaApp> {
         selectedBook, selectedTab,
         (payload) => request(payload, tokenValue),
       );
+      final palette = await readPresentation(selectedBook, selectedTab, tokenValue);
+      applyMonthOptions(selectedBook, selectedTab, options, palette);
       if (!mounted || account != activeAccount) return;
+      setState(() => presentation = palette);
       final updated = await navigation.push<bool>(SheetRecordEditor(
           book: selectedBook,
           tab: selectedTab,
           sheetRow: actualRow,
           original: existing,
           options: options,
-          objectColor: siteColor,
+          objectColor: palette.objectColor,
+          referenceColor: palette.financeColor,
           onSave: (values, requestId) async {
             final user = account;
             if (user == null || user != activeAccount) {
@@ -228,16 +253,7 @@ class _BudowaAppState extends State<BudowaApp> {
     ]),
   );
 
-  Color siteColor(String name) {
-    switch (name.trim().toLowerCase()) {
-      case 'legionowo michał': return const Color(0xFFE8F6E8);
-      case 'lomyanki grzegorz': return const Color(0xFF9FC5E8);
-      case 'rembertow rafal': return const Color(0xFFFF9900);
-      case 'stare babice grzegorz': return const Color(0xFFE8EAED);
-      case 'адміністрація': return const Color(0xFF00FF00);
-      default: return const Color(0xF5FFFFFF);
-    }
-  }
+  Color siteColor(String name) => presentation.objectColor(name);
 
   Widget dataCard(List<String> record, int index) {
     final isHours = book == 'hours';
@@ -702,6 +718,7 @@ class _BudowaAppState extends State<BudowaApp> {
       final rowNumbers = <int>[];
       var reachedEnd = false;
       int? lastDataRow;
+      var palette = presentation;
       for (var page = 0; page < maxPages; page++) {
         if (!mounted || account != currentAccount ||
             book != selectedBook || tab != selectedTab) return;
@@ -709,7 +726,9 @@ class _BudowaAppState extends State<BudowaApp> {
           'action': 'read', 'book': selectedBook, 'tab': selectedTab,
           'start': startRow, 'limit': pageSize,
           if (page == 0 && (apiVersion == '0.5' || apiVersion == '0.6')) 'includeMeta': true,
+          if (page == 0) 'includePresentation': true,
         }, freshToken);
+        if (page == 0) palette = SheetPresentation.fromResponse(result);
         if (page == 0 && result['lastDataRow'] is int) {
           lastDataRow = result['lastDataRow'] as int;
         }
@@ -746,7 +765,7 @@ class _BudowaAppState extends State<BudowaApp> {
           'потрібне збільшення ліміту.');
       }
       if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
-        setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; });
+        setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; presentation = palette; });
       }
     } catch (e) {
       if (mounted) setState(() => error = '$e');
