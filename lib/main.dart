@@ -100,12 +100,14 @@ class _BudowaAppState extends State<BudowaApp> {
       }.contains(tab)
       : <String>{'Операції', 'Закупівельники', 'Довідники'}.contains(tab);
 
-  Future<void> openFinanceDraft() async {
+  Future<void> openLocalDraft() async {
     if (busy || account == null) return;
     final activeAccount = account!;
     final selectedTab = tab;
-    if (selectedTab != 'Операції') {
-      await navigation.push<void>(FinanceTabDraftForm(tab: selectedTab));
+    final selectedBook = book;
+    if (selectedTab != 'Операції' && selectedTab != 'Робочі години' && selectedTab != 'Історія ставок') {
+      await navigation.push<void>(selectedBook == 'finance'
+        ? FinanceTabDraftForm(tab: selectedTab) : HoursTabDraftForm(tab: selectedTab));
       return;
     }
     setState(() { busy = true; error = null; });
@@ -113,12 +115,14 @@ class _BudowaAppState extends State<BudowaApp> {
       final tokenValue = (await activeAccount.authentication).idToken;
       if (tokenValue == null) throw Exception('Не вдалося оновити авторизацію');
       final options = await loadLookupOptions(
-        'finance', selectedTab, (payload) => request(payload, tokenValue),
+        selectedBook, selectedTab, (payload) => request(payload, tokenValue),
       );
       if (!mounted || account != activeAccount) return;
-      await navigation.push<void>(FinanceTabDraftForm(
-        tab: selectedTab, options: options, objectColor: siteColor,
-      ));
+      await navigation.push<void>(selectedBook == 'finance'
+        ? FinanceTabDraftForm(tab: selectedTab, options: options, objectColor: siteColor)
+        : selectedTab == 'Робочі години'
+          ? HoursEntryForm(options: options, objectColor: siteColor)
+          : HoursTabDraftForm(tab: selectedTab, options: options));
     } catch (exception) {
       if (mounted) setState(() => error = '$exception');
     } finally {
@@ -229,7 +233,7 @@ class _BudowaAppState extends State<BudowaApp> {
       case 'legionowo michał': return const Color(0xFFE8F6E8);
       case 'lomyanki grzegorz': return const Color(0xFF9FC5E8);
       case 'rembertow rafal': return const Color(0xFFFF9900);
-      case 'stare babice grzegorz': return const Color(0xFFE8EAF0);
+      case 'stare babice grzegorz': return const Color(0xFFE8EAED);
       case 'адміністрація': return const Color(0xFF00FF00);
       default: return const Color(0xF5FFFFFF);
     }
@@ -325,7 +329,7 @@ class _BudowaAppState extends State<BudowaApp> {
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold,
               color: Color(0xFF17365B)))),
         for (final value in values)
-          Card(color: const Color(0xF5FFFFFF),
+          Card(color: title == 'Об’єкти' ? siteColor(value) : const Color(0xF5FFFFFF),
             margin: const EdgeInsets.only(bottom: 6),
             child: Padding(padding: const EdgeInsets.symmetric(
               horizontal: 14, vertical: 12),
@@ -402,6 +406,13 @@ class _BudowaAppState extends State<BudowaApp> {
       final date = DateTime(year,month,day);
       return date.day==day && date.month==month && date.year==year
           ? date : null;
+    }
+    for (final records in grouped.values) {
+      records.sort((a,b) {
+        final byName = cell(a,1).toLowerCase().compareTo(cell(b,1).toLowerCase());
+        if (byName != 0) return byName;
+        return cell(a,3).compareTo(cell(b,3));
+      });
     }
     final dates = grouped.keys.toList()..sort((a,b) {
       final da = parseDate(a); final db = parseDate(b);
@@ -905,12 +916,7 @@ class _BudowaAppState extends State<BudowaApp> {
                           Expanded(child: OutlinedButton.icon(
                             onPressed: busy ? null : canWriteTest && editableTab
                               ? () => openRecordEditor()
-                              : book == 'finance'
-                                ? openFinanceDraft
-                                : () => navigation.push<void>(
-                                    tab == 'Робочі години'
-                                      ? const HoursEntryForm()
-                                      : HoursTabDraftForm(tab: tab)),
+                              : openLocalDraft,
                             icon: Icon(canWriteTest && editableTab
                               ? Icons.add_circle_outline : Icons.edit_note, size: 18),
                             label: Text(canWriteTest && editableTab ? 'Додати' : 'Чернетка'),
