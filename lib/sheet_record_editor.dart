@@ -258,15 +258,18 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
   Widget choiceLabel(TestField f, String value) {
     final objectField = (widget.book == 'finance' && widget.tab == 'Операції' && f.column == 7)
       || (widget.book == 'hours' && widget.tab == 'Робочі години' && f.column == 2);
+    final operationColor = f.kind != 'operation' ? null :
+        value == 'Надходження' ? const Color(0xFF176B4D) : const Color(0xFFAD3C32);
     return Row(children: [
-      if (objectField && value.isNotEmpty) ...[
+      if ((objectField || operationColor != null) && value.isNotEmpty) ...[
         Container(width: 20, height: 20, decoration: BoxDecoration(
-          color: widget.objectColor?.call(value) ?? Colors.white,
+          color: operationColor ?? widget.objectColor?.call(value) ?? Colors.white,
           border: Border.all(color: Colors.black26),
           borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 8),
       ],
       Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
+        style: TextStyle(color: operationColor),
         overflow: TextOverflow.ellipsis)),
     ]);
   }
