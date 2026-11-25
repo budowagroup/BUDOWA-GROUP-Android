@@ -25,7 +25,16 @@ function sheet(name,maxRows=15){
     hideSheet:()=>{},
     setFailOnce:(row,col)=>{failOnce=key(row,col);},
     getRange(row,col,numRows=1,numCols=1){
+      if(typeof row==='string'){
+        const m=/^([A-Z])(\d+):([A-Z])(\d+)$/.exec(row);
+        if(!m)throw new Error('Unsupported mock A1 range '+row);
+        row=Number(m[2]);col=m[1].charCodeAt(0)-64;
+        numRows=Number(m[4])-row+1;numCols=m[3].charCodeAt(0)-64-col+1;
+      }
       const range={
+        getDataValidation:()=>name==='Робочі години'&&row===4&&[11,13].includes(col)
+          ? {getCriteriaType:()=> 'VALUE_IN_LIST',
+             getCriteriaValues:()=>[['СЕРПЕНЬ 2026','ВЕРЕСЕНЬ 2026','ЖОВТЕНЬ 2026','ЛИСТОПАД 2026','ГРУДЕНЬ 2026']]} : null,
         getValue:()=>cell(row,col).value,
         getDisplayValue:()=>String(cell(row,col).value),
         getFormula:()=>cell(row,col).formula,
@@ -62,6 +71,8 @@ const finance=sheet('Операції');
 const buyer=sheet('Закупівельники');
 const hours=sheet('Робочі години');
 const payroll=sheet('Працівники');
+const projects=sheet('Обʼєкти');
+const directories=sheet('Довідники');
 buyer.cell(4,1).value='Ігор';
 finance.cell(4,2).value='19.11.2026';
 finance.cell(4,3).value='Ігор';
@@ -70,12 +81,19 @@ finance.cell(4,5).value='Витрати';
 finance.cell(4,6).value='Original note';
 payroll.cell(4,1).value='Test Employee';
 payroll.cell(4,3).formula='=CALCULATE()';
+payroll.cell(4,6).value='Test Employee';
+payroll.cell(5,1).value='Inactive Employee';
+projects.cell(4,1).value='Test project';
+projects.cell(4,5).value='Test project';
+projects.cell(5,1).value='Inactive project';
+directories.cell(4,1).value='Test category';
+directories.cell(4,2).value='Test project';
 const workbooks={
   '1l5eB0EafcIBfwosO_o5s6TYiUOvqek6uuo037DoHeGk':{
-    sheets:{'Операції':finance,'Закупівельники':buyer},
+    sheets:{'Операції':finance,'Закупівельники':buyer,'Довідники':directories},
   },
   '1pY6rcSlodNlXFRcu_UYqFnc9DB9zuIFFsoChX1Zmb_Y':{
-    sheets:{'Робочі години':hours,'Працівники':payroll},
+    sheets:{'Робочі години':hours,'Працівники':payroll,'Обʼєкти':projects},
   },
 };
 for (const wb of Object.values(workbooks)){
@@ -85,7 +103,7 @@ for (const wb of Object.values(workbooks)){
 }
 const ctx={
   Date,JSON,Number,Object,String,Array,Error,RegExp,Math,
-  SpreadsheetApp:{openById:id=>workbooks[id],flush:()=>{}},
+  SpreadsheetApp:{openById:id=>workbooks[id],flush:()=>{},DataValidationCriteria:{VALUE_IN_LIST:'VALUE_IN_LIST'}},
   LockService:{getScriptLock:()=>({tryLock:()=>true,releaseLock:()=>{}})},
   Utilities:{
     parseDate:iso=>new Date(iso+'T00:00:00Z'),
@@ -94,8 +112,7 @@ const ctx={
 };
 vm.createContext(ctx);
 vm.runInContext(code,ctx,{filename:'Code.gs'});
-// Reference validation belongs to separate checks; here exercise the write protocol.
-ctx.bgValidateRefs_=()=>{};
+// Exercise real reference validation as well as the write protocol.
 let count=0;
 function test(name,fn){fn();console.log('PASS '+name);count++;}
 function error(fn,message){assert.throws(fn,e=>e.message===message,message);}
@@ -166,7 +183,7 @@ test('partial writes are rolled back and logged',()=>{
 });
 test('creating worker hours fails if calculated formulas were not prepared',()=>{
   const req={action:'create',book:'hours',tab:'Робочі години',requestId:'writeTestMissingFormula07',
-    values:{'0':'2026-11-20','1':'Test Employee','2':'Rembertow Rafal',
+    values:{'0':'2026-11-20','1':'Test Employee','2':'Test project',
       '3':'08:00','4':'17:00','5':'0.5','9':'0','10':'','11':'0','12':'','14':''}};
   error(()=>ctx.bgWrite_(req,'owner@example.com'),'MISSING_FORMULA_ROW');
   assert.equal(hours.cell(4,1).value,'');
@@ -178,5 +195,51 @@ test('renaming worker is blocked to protect dependent formulas',()=>{
     values:{'0':'New Name','1':'','3':'Так','4':''}};
   error(()=>ctx.bgWrite_(req,'owner@example.com'),'RENAME_REQUIRES_MIGRATION');
   assert.equal(payroll.cell(4,1).value,'Test Employee');
+});
+function hoursValues(overrides={}){
+  return {'0':'2026-11-25','1':'Test Employee','2':'Test project',
+    '3':'08:00','4':'17:00','5':'0.5','9':'10','10':'ЛИСТОПАД 2026',
+    '11':'0','12':'','14':'TEST hours',...overrides};
+}
+const hoursCreate={action:'create',book:'hours',tab:'Робочі години',
+  requestId:'writeTestHoursCreate09',values:hoursValues()};
+test('inactive worker and project rejected before mutation',()=>{
+  error(()=>ctx.bgWrite_({...hoursCreate,values:hoursValues({'1':'Inactive Employee'})},'owner@example.com'),'EMPLOYEE_NOT_FOUND');
+  error(()=>ctx.bgWrite_({...hoursCreate,values:hoursValues({'2':'Inactive project'})},'owner@example.com'),'PROJECT_NOT_FOUND');
+  assert.equal(hours.cell(4,1).value,'');
+});
+test('payment month is required and restricted to sheet validation',()=>{
+  error(()=>ctx.bgWrite_({...hoursCreate,values:hoursValues({'10':''})},'owner@example.com'),'INVALID_PAYMENT_MONTH');
+  error(()=>ctx.bgWrite_({...hoursCreate,values:hoursValues({'10':'INVALID'})},'owner@example.com'),'INVALID_PAYMENT_MONTH');
+  assert.equal(hours.cell(4,1).value,'');
+});
+test('finance category and project must be real reference values',()=>{
+  error(()=>ctx.bgWrite_({...create,requestId:'writeTestInvalidCat10',values:financeValues({'6':'INVALID'})},'owner@example.com'),'CATEGORY_NOT_FOUND');
+  error(()=>ctx.bgWrite_({...create,requestId:'writeTestInvalidProject11',values:financeValues({'7':'INVALID'})},'owner@example.com'),'PROJECT_NOT_FOUND');
+  assert.equal(finance.cell(6,2).value,'');
+});
+test('create work-hours record preserves prepared calculation formulas',()=>{
+  for(const col of [7,8,9,14]) hours.cell(4,col).formula='=CALCULATE_'+col+'()';
+  const result=ctx.bgWrite_(hoursCreate,'owner@example.com');
+  assert.equal(result.rowNumber,4);
+  assert.equal(hours.cell(4,2).value,'Test Employee');
+  assert.equal(hours.cell(4,3).value,'Test project');
+  assert.equal(hours.cell(4,4).value,8/24);
+  assert.equal(hours.cell(4,5).value,17/24);
+  assert.equal(hours.cell(4,6).value,0.5);
+  assert.equal(hours.cell(4,11).value,'ЛИСТОПАД 2026');
+  for(const col of [7,8,9,14]) assert.equal(hours.cell(4,col).formula,'=CALCULATE_'+col+'()');
+});
+test('edit work-hours record in place without duplicate or formula replacement',()=>{
+  const expected={};
+  for(const col of [0,1,2,3,4,5,9,10,11,12,14]) expected[col]=String(hours.cell(4,col+1).value);
+  const result=ctx.bgWrite_({action:'update',book:'hours',tab:'Робочі години',
+    rowNumber:4,expected,requestId:'writeTestHoursUpdate12',
+    values:hoursValues({'4':'18:00','14':'TEST edited hours'})},'owner@example.com');
+  assert.equal(result.rowNumber,4);
+  assert.equal(hours.cell(4,5).value,18/24);
+  assert.equal(hours.cell(4,15).value,'TEST edited hours');
+  assert.equal(hours.cell(5,1).value,'');
+  for(const col of [7,8,9,14]) assert.equal(hours.cell(4,col).formula,'=CALCULATE_'+col+'()');
 });
 console.log('Write integration tests passed: '+count);
