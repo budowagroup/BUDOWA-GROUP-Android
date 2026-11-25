@@ -1,7 +1,7 @@
 name: TEST Apps Script backend checks
 on:
   push:
-    branches: [main]
+    branches: [main, fix/finance-dropdowns-test]
     paths:
       - 'backend/**'
       - '.github/workflows/backend-tests.yml'
