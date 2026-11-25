@@ -1,4 +1,5 @@
 import 'api_health_status.dart';
+import 'app_navigation_controller.dart';
 import 'read_only_diagnostics.dart';
 import 'hours_entry_form.dart';
 import 'sheet_record_editor.dart';
@@ -23,6 +24,8 @@ class BudowaApp extends StatefulWidget {
 }
 
 class _BudowaAppState extends State<BudowaApp> {
+  // This State sits above the MaterialApp it creates: use its navigator key.
+  final navigation = AppNavigationController();
   late final GoogleSignIn google = GoogleSignIn(
     scopes: const ['email', 'profile'],
     serverClientId: googleWebClientId.isEmpty ? null : googleWebClientId,
@@ -132,8 +135,7 @@ class _BudowaAppState extends State<BudowaApp> {
         (payload) => request(payload, tokenValue),
       );
       if (!mounted || account != activeAccount) return;
-      final updated = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => SheetRecordEditor(
+      final updated = await navigation.push<bool>(SheetRecordEditor(
           book: selectedBook,
           tab: selectedTab,
           sheetRow: actualRow,
@@ -166,16 +168,14 @@ class _BudowaAppState extends State<BudowaApp> {
             };
             await request(payload, freshToken);
           },
-        )),
+        ),
       );
       if (updated == true && mounted) {
         await load();
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(error == null
-              ? 'TEST-запис збережено та дані оновлено.'
-              : 'TEST-запис збережено. Оновлення списку не вдалося — натисніть «Оновити».'),
-        ));
+        navigation.showMessage(error == null
+            ? 'TEST-запис збережено та дані оновлено.'
+            : 'TEST-запис збережено. Оновлення списку не вдалося — натисніть «Оновити».');
       }
     } catch (exception) {
       if (mounted) setState(() => error = '$exception');
@@ -688,14 +688,11 @@ class _BudowaAppState extends State<BudowaApp> {
         throw Exception('Не вдалося отримати Google ID Token');
       }
       if (!mounted || account != selectedAccount) return;
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => ReadOnlyDiagnosticsScreen(
+      await navigation.push<void>(ReadOnlyDiagnosticsScreen(
             apiVersion: apiVersion ?? 'невідома',
             dataSource: apiDataSource ?? 'не підтверджено',
             read: (tab) => request(readOnlyPayload(tab), freshToken),
           ),
-        ),
       );
     } catch (exception) {
       if (mounted) {
@@ -723,6 +720,8 @@ class _BudowaAppState extends State<BudowaApp> {
       ? const ['Робочі години', 'Розрахунок', 'Працівники', 'Обʼєкти', 'Історія ставок']
       : const ['Операції', 'Панель', 'Закупівельники', 'Довідники'];
     return MaterialApp(
+      navigatorKey: navigation.navigatorKey,
+      scaffoldMessengerKey: navigation.scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
       title: 'BUDOWA GROUP',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF17365B)),
@@ -838,12 +837,12 @@ class _BudowaAppState extends State<BudowaApp> {
                           Expanded(child: OutlinedButton.icon(
                             onPressed: busy ? null : canWriteTest && editableTab
                               ? () => openRecordEditor()
-                              : () => Navigator.of(context).push(MaterialPageRoute<void>(
-                                  builder: (_) => book == 'finance'
+                              : () => navigation.push<void>(
+                                  book == 'finance'
                                     ? FinanceTabDraftForm(tab: tab)
                                     : tab == 'Робочі години'
                                       ? const HoursEntryForm()
-                                      : HoursTabDraftForm(tab: tab))),
+                                      : HoursTabDraftForm(tab: tab)),
                             icon: Icon(canWriteTest && editableTab
                               ? Icons.add_circle_outline : Icons.edit_note, size: 18),
                             label: Text(canWriteTest && editableTab ? 'Додати' : 'Чернетка'),

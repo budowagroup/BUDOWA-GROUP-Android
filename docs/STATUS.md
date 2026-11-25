@@ -1,3 +1,11 @@
+## Виправлення навігації Android — v0.3.2+7 (25.11.2026)
+
+- За скриншотом виявлено `Navigator operation requested with a context that does not include a Navigator` при натисканні «Перевірити всі 9 вкладок (читання)».
+- Причина: `_BudowaAppState` створює `MaterialApp`, тому `Navigator.of(context)` зі state-контексту знаходиться вище Navigator. Помилка також загрожувала відкриттю «Чернетки», редактора та повідомленням через ScaffoldMessenger.
+- Додано `AppNavigationController` із `navigatorKey` і `scaffoldMessengerKey`; замінено root-context navigation у `lib/main.dart`; додано widget-тести для маршруту діагностики та SnackBar.
+- Підвищено версію APK до `0.3.2+7`. Сервер `backend/Code.gs`, TEST таблиці, ролі й `ENABLE_TEST_WRITES` не змінювалися.
+- За скриншотами: API `0.5`, джерело `BG TEST Android API`, роль `owner`, дані видно на 9 вкладках. Автоматична перевірка ще потребує повторного запуску на новому APK.
+
 # BUDOWA GROUP — TEST: поточний стан
 
 **Початкова перевірка:** 21.11.2026. **Основний аудит:** [AUDIT_2026-11-21.md](AUDIT_2026-11-21.md). **Правила виконання:** [WORKFLOW.md](WORKFLOW.md).
