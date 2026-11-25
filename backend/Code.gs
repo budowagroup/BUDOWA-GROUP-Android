@@ -73,6 +73,7 @@ function doPost(e) {
       if (request.includeMeta === true) {
         readResult.lastDataRow=bgLastDataRow_(request);
       }
+      if (request.includePresentation === true) readResult.presentation=bgPresentation_(request);
       return bgOutput_(readResult);
     }
     if (request.action === 'history') {
@@ -152,6 +153,392 @@ function bgRead_(request) {
   if (start > target.sheet.getMaxRows()) return [];
   var count = Math.min(limit,target.sheet.getMaxRows()-start+1);
   return target.sheet.getRange(start,1,count,cfg.width).getDisplayValues();
+}
+// Read presentation metadata only from the configured TEST workbooks.
+// Recognize exact-name conditional rules such as =$C4="Project".
+// The underlying spreadsheet remains the authority; no write is performed.
+function bgExactColors_(sheet,column) {
+  var out=Object.create(null);
+  var letter=String.fromCharCode(64+column);
+  var pattern=new RegExp('^=\\s*\\$?'+letter+'\\$?\\d+\\s*=\\s*"((?:[^"]|"")*)"\\s*
+  var target=bgTarget_(request,false);
+  var sheet=target.sheet,cfg=target.cfg;
+  var last=sheet.getLastRow();
+  if (last<cfg.start) return cfg.start-1;
+  // Finance dashboard is a layout with labels mostly in column B.
+  if (target.book==='finance' && target.tab==='Панель') return last;
+  var columns=target.tab==='Довідники' ? [0,1] :
+    [typeof cfg.key==='number' ? cfg.key : 0];
+  var first=Math.min.apply(null,columns),end=Math.max.apply(null,columns);
+  var displays=sheet.getRange(cfg.start,first+1,last-cfg.start+1,end-first+1)
+    .getDisplayValues();
+  for(var i=displays.length-1;i>=0;i--) {
+    var hasKey=columns.some(function(c){
+      return String(displays[i][c-first] || '').trim()!=='';
+    });
+    if (hasKey) return cfg.start+i;
+  }
+  return cfg.start-1;
+}
+function bgHistory_(request) {
+  var target = bgTarget_(request,false);
+  var audit = target.spreadsheet.getSheetByName(BG_TEST.auditName);
+  if (!audit || audit.getLastRow() < 2) return [];
+  var last = audit.getLastRow();
+  var start = Math.max(2,last-49);
+  return audit.getRange(start,1,last-start+1,7).getDisplayValues();
+}
+function bgText_(value) {
+  if (typeof value !== 'string' || value.length > 500) throw new Error('INVALID_VALUE');
+  var str = value.trim();
+  if (/^[=+@\t\r]/.test(str)) throw new Error('FORMULA_INPUT_FORBIDDEN');
+  return str;
+}
+function bgIso_(value) {
+  var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new Error('INVALID_DATE');
+  var y=Number(match[1]),m=Number(match[2]),d=Number(match[3]);
+  var dt=new Date(Date.UTC(y,m-1,d));
+  if (y<2020 || y>2100 || dt.getUTCFullYear()!==y ||
+      dt.getUTCMonth()!==m-1 || dt.getUTCDate()!==d) {
+    throw new Error('INVALID_DATE');
+  }
+  return value;
+}
+function bgNumber_(value,positive) {
+  if (!/^-?\d+(\.\d+)?$/.test(value)) throw new Error('INVALID_NUMBER');
+  var n=Number(value);
+  if (!Number.isFinite(n) || n<0 || (positive && n===0) || n>1000000000) {
+    throw new Error('INVALID_NUMBER');
+  }
+  return n;
+}
+function bgTime_(value) {
+  var match=/^([01]\d|2[0-3]):([0-5]\d)$/.exec(value);
+  if (!match) throw new Error('INVALID_TIME');
+  return (Number(match[1])*60 + Number(match[2])) / 1440;
+}
+function bgDateValue_(iso,spreadsheet) {
+  bgIso_(iso);
+  return Utilities.parseDate(iso, spreadsheet.getSpreadsheetTimeZone(),'yyyy-MM-dd');
+}
+function bgValue_(target,index,raw) {
+  var v=bgText_(raw);
+  var book=target.book,tab=target.tab;
+  if (book==='hours' && tab==='Робочі години') {
+    if (index===0) { if (v<'2026-08-17') throw new Error('INVALID_DATE'); return bgDateValue_(v,target.spreadsheet); }
+    if (index===3 || index===4) return bgTime_(v);
+    if (index===5 || index===9 || index===11) return v===''? '':bgNumber_(v,false);
+  }
+  if (book==='hours' && tab==='Історія ставок') {
+    if (index===1) { if (v<'2026-08-17') throw new Error('INVALID_DATE'); return bgDateValue_(v,target.spreadsheet); }
+    if (index===2) return bgNumber_(v,true);
+  }
+  if (book==='finance' && tab==='Операції') {
+    if (index===1) {
+      bgIso_(v);
+      return v.substring(8,10)+'.'+v.substring(5,7)+'.'+v.substring(0,4);
+    }
+    if (index===3) return bgNumber_(v,true);
+    if (index===4 && v!=='Надходження' && v!=='Витрати') {
+      throw new Error('INVALID_OPERATION');
+    }
+  }
+  if (book==='hours' &&
+    ((tab==='Працівники' && index===3) ||
+     (tab==='Обʼєкти' && index===2)) && v!=='Так' && v!=='Ні') {
+    throw new Error('INVALID_ACTIVE_FLAG');
+  }
+  return v;
+}
+function bgValidateRefs_(target,values) {
+  if (target.book==='hours' && (target.tab==='Робочі години' ||
+      target.tab==='Історія ставок')) {
+    var employees=target.spreadsheet.getSheetByName('Працівники')
+      .getRange(target.tab==='Робочі години'?'F4:F53':'A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
+    var employeeName=target.tab==='Робочі години' ? values['1'] : values['0'];
+    if (employees.indexOf(employeeName)<0) {
+      throw new Error('EMPLOYEE_NOT_FOUND');
+    }
+  }
+  if (target.book==='hours' && target.tab==='Робочі години') {
+    var sites=target.spreadsheet.getSheetByName('Обʼєкти')
+      .getRange('E4:E53').getDisplayValues().map(function(r){return r[0].trim();});
+    if (sites.indexOf(values['2'])<0) throw new Error('PROJECT_NOT_FOUND');
+    [[9,10],[11,12]].forEach(function(pair){
+      var month=String(values[String(pair[1])]||'').trim();
+      var rule=target.sheet.getRange(4,pair[1]+1).getDataValidation();
+      if (!rule || rule.getCriteriaType()!==SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) throw new Error('MISSING_MONTH_VALIDATION');
+      var allowed=rule.getCriteriaValues()[0];
+      if ((month && allowed.indexOf(month)<0) || (Number(values[String(pair[0])]||0)>0 && !month)) throw new Error('INVALID_PAYMENT_MONTH');
+    });
+    if (values['3']===values['4']) throw new Error('INVALID_HOURS');
+    var st=bgTime_(values['3']),en=bgTime_(values['4']);
+    var duration=(en-st+1)%1*24;
+    if (duration===0 || Number(values['5'] || 0)>=duration) {
+      throw new Error('INVALID_BREAK');
+    }
+  }
+  if (target.book==='finance' && target.tab==='Операції') {
+    var buyers=target.spreadsheet.getSheetByName('Закупівельники')
+      .getRange('A4:A103').getDisplayValues().map(function(r){return r[0].trim();});
+    if (buyers.indexOf(values['2'])<0) throw new Error('BUYER_NOT_FOUND');
+    if (values['7']) {
+      var projects=target.spreadsheet.getSheetByName('Довідники')
+        .getRange('B4:B53').getDisplayValues().map(function(r){return r[0].trim();});
+      if (projects.indexOf(values['7'])<0) throw new Error('PROJECT_NOT_FOUND');
+    }
+    if (values['6']) {
+      var cats=target.spreadsheet.getSheetByName('Довідники')
+        .getRange('A4:A51').getDisplayValues().map(function(r){return r[0].trim();});
+      if (cats.indexOf(values['6'])<0) throw new Error('CATEGORY_NOT_FOUND');
+    }
+  }
+}
+function bgFirstEmpty_(sheet,start,key) {
+  var total=sheet.getMaxRows()-start+1;
+  if (total<1) throw new Error('SHEET_FULL');
+  var values=sheet.getRange(start,key+1,total,1).getDisplayValues();
+  for (var i=0;i<values.length;i++) {
+    if (!values[i][0].trim()) return start+i;
+  }
+  throw new Error('SHEET_FULL');
+}
+function bgAudit_(target) {
+  var sheet=target.spreadsheet.getSheetByName(BG_TEST.auditName);
+  if (!sheet) {
+    sheet=target.spreadsheet.insertSheet(BG_TEST.auditName);
+    sheet.appendRow(['requestId','time','status','actor','action','tab','row','response']);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+function bgExistingRequest_(audit,id) {
+  if (audit.getLastRow()<2) return null;
+  var found=audit.getRange(2,1,audit.getLastRow()-1,1)
+    .createTextFinder(id).matchEntireCell(true).findNext();
+  return found ? found.getRow() : null;
+}
+function bgValidateUnique_(target,values,rowNumber) {
+  var tab=target.tab;
+  if (tab!=='Працівники' && tab!=='Обʼєкти' &&
+      tab!=='Закупівельники' && tab!=='Довідники') return;
+  var name=values['0'].toLowerCase();
+  var cfg=target.cfg, start=cfg.start;
+  var keys=target.sheet.getRange(start,1,target.sheet.getMaxRows()-start+1,1)
+    .getDisplayValues();
+  for (var i=0;i<keys.length;i++) {
+    if (start+i!==rowNumber && keys[i][0].trim().toLowerCase()===name) {
+      throw new Error('DUPLICATE_NAME');
+    }
+  }
+}
+function bgWrite_(request,email) {
+  var target=bgTarget_(request,true);
+  var cfg=target.cfg;
+  var values=request.values;
+  if (!values || typeof values!=='object' || Array.isArray(values)) {
+    throw new Error('INVALID_VALUES');
+  }
+  var keys=Object.keys(values);
+  if (keys.length!==cfg.editable.length ||
+      cfg.editable.some(function(index){return typeof values[String(index)]!=='string';}) ||
+      keys.some(function(key){return cfg.editable.indexOf(Number(key))<0;})) {
+    throw new Error('INVALID_EDITABLE_FIELDS');
+  }
+  cfg.required.forEach(function(index){
+    if (!values[String(index)].trim()) throw new Error('REQUIRED_FIELD');
+  });
+  var parsed={};
+  cfg.editable.forEach(function(index){
+    parsed[index]=bgValue_(target,index,values[String(index)]);
+  });
+  bgValidateRefs_(target,values);
+  var id=request.requestId;
+  if (typeof id!=='string' || !/^[a-zA-Z0-9_-]{12,120}$/.test(id)) {
+    throw new Error('INVALID_REQUEST_ID');
+  }
+  var lock=LockService.getScriptLock();
+  if (!lock.tryLock(20000)) throw new Error('BUSY_RETRY');
+  try {
+    var audit=bgAudit_(target);
+    var earlier=bgExistingRequest_(audit,id);
+    if (earlier!==null) {
+      var status=audit.getRange(earlier,3).getDisplayValue();
+      if (status==='DONE') {
+        return JSON.parse(audit.getRange(earlier,8).getValue());
+      }
+      throw new Error('REQUEST_ALREADY_STARTED');
+    }
+    var row;
+    if (request.action==='create') {
+      row=bgFirstEmpty_(target.sheet,cfg.start,cfg.key);
+    } else {
+      row=Number(request.rowNumber);
+      if (!Number.isInteger(row) || row<cfg.start ||
+          row>target.sheet.getMaxRows()) throw new Error('INVALID_ROW');
+      var expected=request.expected;
+      if (!expected || typeof expected!=='object') throw new Error('EXPECTED_REQUIRED');
+      var current=target.sheet.getRange(row,1,1,cfg.width).getDisplayValues()[0];
+      if (!current[cfg.key]) throw new Error('ROW_NOT_FOUND');
+      for (var i=0;i<cfg.editable.length;i++) {
+        var idx=cfg.editable[i], key=String(idx);
+        if (typeof expected[key]!=='string' || expected[key]!==current[idx]) {
+          throw new Error('EDIT_CONFLICT_REFRESH');
+        }
+      }
+    }
+    // Do not silently break references or formula lookups by renaming keys.
+    // Name changes require a separate dependency-aware migration.
+    if (request.action==='update' &&
+        (target.tab==='Працівники' || target.tab==='Обʼєкти' ||
+         target.tab==='Закупівельники' || target.tab==='Довідники')) {
+      var existingName=target.sheet.getRange(row,1).getDisplayValue().trim();
+      if (values['0']!==existingName) {
+        throw new Error('RENAME_REQUIRES_MIGRATION');
+      }
+    }
+    bgValidateUnique_(target,values,row);
+    if (target.tab==='Історія ставок') {
+      var name=values['0'].trim();
+      var effectiveDate=values['1'];
+      var existingRates=target.sheet.getRange(
+        cfg.start,1,target.sheet.getMaxRows()-cfg.start+1,2
+      ).getValues();
+      for (var k=0;k<existingRates.length;k++) {
+        if (cfg.start+k===row) continue;
+        var priorName=String(existingRates[k][0] || '').trim();
+        var priorDate=existingRates[k][1];
+        if (priorName!==name || !(priorDate instanceof Date)) continue;
+        var priorIso=Utilities.formatDate(
+          priorDate,target.spreadsheet.getSpreadsheetTimeZone(),'yyyy-MM-dd');
+        if (priorIso===effectiveDate) throw new Error('DUPLICATE_RATE_DATE');
+      }
+    }
+
+    (cfg.formulas||[]).forEach(function(column){
+      if (!target.sheet.getRange(row,column+1).getFormula()) {
+        throw new Error('MISSING_FORMULA_ROW');
+      }
+    });
+    // PRE-FLIGHT ALL FIELDS before touching any data cell.
+    // On create, do not overwrite leftovers in an apparently empty key row.
+    var snapshot=[];
+    for (var p=0;p<cfg.editable.length;p++) {
+      var allowedColumn=cfg.editable[p];
+      var existingCell=target.sheet.getRange(row,allowedColumn+1);
+      if (existingCell.getFormula()) throw new Error('FORMULA_CELL_PROTECTED');
+      var existingValue=existingCell.getValue();
+      if (request.action==='create' && existingValue!=='' &&
+          existingValue!==null) {
+        throw new Error('CREATE_TARGET_NOT_EMPTY');
+      }
+      snapshot.push({
+        column:allowedColumn,
+        value:existingValue,
+        format:existingCell.getNumberFormat()
+      });
+    }
+    var ledgerRow=audit.getLastRow()+1;
+    audit.getRange(ledgerRow,1,1,7).setValues([[
+      id,new Date(), 'PENDING', email, request.action,
+      target.book + ':' + target.tab, row
+    ]]);
+    try {
+      for (var j=0;j<cfg.editable.length;j++) {
+        var col=cfg.editable[j];
+        var dest=target.sheet.getRange(row,col+1);
+        dest.setValue(parsed[col]);
+        if (parsed[col] instanceof Date) dest.setNumberFormat('dd.MM.yyyy');
+        if (target.tab==='Робочі години' && (col===3||col===4)) {
+          dest.setNumberFormat('hh:mm');
+        }
+      }
+      SpreadsheetApp.flush();
+      var result={ok:true,action:request.action,book:target.book,tab:target.tab,
+        rowNumber:row};
+      audit.getRange(ledgerRow,8).setValue(JSON.stringify(result));
+      audit.getRange(ledgerRow,3).setValue('DONE');
+      return result;
+    } catch (writeError) {
+      // Sheets writes are not database transactions. Make a best-effort
+      // rollback of every editable value and original number format.
+      var rollbackSucceeded=true;
+      try {
+        for (var q=0;q<snapshot.length;q++) {
+          var original=snapshot[q];
+          var cell=target.sheet.getRange(row,original.column+1);
+          cell.setValue(original.value);
+          cell.setNumberFormat(original.format);
+        }
+        SpreadsheetApp.flush();
+      } catch (rollbackError) {
+        rollbackSucceeded=false;
+      }
+      try {
+        audit.getRange(ledgerRow,3).setValue(
+          rollbackSucceeded ? 'ROLLED_BACK' : 'CHECK_MANUALLY');
+      } catch (auditError) {
+        rollbackSucceeded=false;
+      }
+      throw new Error(rollbackSucceeded
+        ? 'WRITE_FAILED_ROLLED_BACK' : 'WRITE_FAILED_REVIEW');
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+,'i');
+  sheet.getConditionalFormatRules().forEach(function(rule){
+    var condition=rule.getBooleanCondition();
+    if (!condition || !rule.getRanges().some(function(range){
+      return range.getColumn()<=column && range.getLastColumn()>=column;
+    })) return;
+    var match=pattern.exec(String(condition.getCriteriaValues()[0]||''));
+    var color=condition.getBackground();
+    if(match && /^#[a-f0-9]{6}$/i.test(String(color||''))) {
+      var name=match[1].replace(/""/g,'"');
+      if(!Object.prototype.hasOwnProperty.call(out,name)) out[name]=color;
+    }
+  });
+  return out;
+}
+function bgReferenceColors_(sheet,range) {
+  var cells=sheet.getRange(range), values=cells.getDisplayValues(), colors=cells.getBackgrounds();
+  var result=Object.create(null);
+  for(var i=0;i<values.length;i++) {
+    var name=String(values[i][0]||'').trim(),color=colors[i][0];
+    if(name && /^#[a-f0-9]{6}$/i.test(String(color||''))) result[name]=color;
+  }
+  return result;
+}
+function bgMonthChoices_(sheet,column) {
+  var rule=sheet.getRange(4,column).getDataValidation();
+  if(!rule || rule.getCriteriaType()!==SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) throw new Error('MISSING_MONTH_VALIDATION');
+  return rule.getCriteriaValues()[0].map(String);
+}
+function bgPresentation_(request) {
+  var target=bgTarget_(request,false);
+  var hours=target.book==='hours'?target.spreadsheet:SpreadsheetApp.openById(BG_TEST.ids.hours);
+  var finance=target.book==='finance'?target.spreadsheet:SpreadsheetApp.openById(BG_TEST.ids.finance);
+  var work=hours.getSheetByName('Робочі години');
+  var ops=finance.getSheetByName('Операції');
+  var dirs=finance.getSheetByName('Довідники');
+  var projects=bgExactColors_(work,3);
+  var financeProjects=bgExactColors_(ops,8);
+  Object.keys(financeProjects).forEach(function(k){projects[k]=financeProjects[k];});
+  var operationColors=bgExactColors_(ops,5);
+  if(!operationColors['Витрати']) {
+    var vals=ops.getRange(4,5,Math.max(1,ops.getLastRow()-3),1);
+    var values=vals.getDisplayValues(), backgrounds=vals.getBackgrounds();
+    for(var i=0;i<values.length;i++) if(values[i][0]==='Витрати') {
+      operationColors['Витрати']=backgrounds[i][0];break;
+    }
+  }
+  return {objectColors:projects,operationColors:operationColors,
+    buyerColors:bgReferenceColors_(finance.getSheetByName('Закупівельники'),'A4:A103'),
+    categoryColors:bgReferenceColors_(dirs,'A4:A51'),
+    advanceMonths:bgMonthChoices_(work,11),paymentMonths:bgMonthChoices_(work,13)};
 }
 function bgLastDataRow_(request) {
   var target=bgTarget_(request,false);
