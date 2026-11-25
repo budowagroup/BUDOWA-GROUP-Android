@@ -441,8 +441,9 @@ class FinanceTabDraftForm extends StatefulWidget {
   final String tab;
   final Map<int, List<String>> options;
   final Color Function(String)? objectColor;
+  final Color Function(int, String)? referenceColor;
   const FinanceTabDraftForm({super.key, required this.tab,
-    this.options = const {}, this.objectColor});
+    this.options = const {}, this.objectColor, this.referenceColor});
   @override
   State<FinanceTabDraftForm> createState() => _FinanceTabDraftFormState();
 }
@@ -495,12 +496,13 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
     final current = controllers[label]!.text;
     final optional = column != 2 && column != 4;
     final items = <String>[if (optional) '', ...choices];
-    Color? operationColor(String value) => column != 4 ? null :
-        value == 'Надходження' ? const Color(0xFFD9EAD3) : Colors.white;
+    Color colorFor(String value) => widget.referenceColor?.call(column,value) ??
+      (column == 4 ? (value == 'Надходження' ? const Color(0xFFD9EAD3) : Colors.white)
+        : column == 7 ? widget.objectColor?.call(value) ?? Colors.white : Colors.white);
     Widget option(String value) => Row(children: [
-      if ((column == 7 || column == 4) && value.isNotEmpty) ...[
+      if (value.isNotEmpty) ...[
         Container(width: 20, height: 20, decoration: BoxDecoration(
-          color: operationColor(value) ?? widget.objectColor?.call(value) ?? Colors.white,
+          color: colorFor(value),
           border: Border.all(color: Colors.black26),
           borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 8),
