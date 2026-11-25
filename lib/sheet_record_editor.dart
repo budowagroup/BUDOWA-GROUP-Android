@@ -259,7 +259,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     final objectField = (widget.book == 'finance' && widget.tab == 'Операції' && f.column == 7)
       || (widget.book == 'hours' && widget.tab == 'Робочі години' && f.column == 2);
     final operationColor = f.kind != 'operation' ? null :
-        value == 'Надходження' ? const Color(0xFF176B4D) : const Color(0xFFAD3C32);
+        value == 'Надходження' ? const Color(0xFFD9EAD3) : Colors.white;
     return Row(children: [
       if ((objectField || operationColor != null) && value.isNotEmpty) ...[
         Container(width: 20, height: 20, decoration: BoxDecoration(
@@ -269,7 +269,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
         const SizedBox(width: 8),
       ],
       Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
-        style: TextStyle(color: operationColor),
+        style: TextStyle(color: f.kind == 'operation' ? Colors.black87 : null),
         overflow: TextOverflow.ellipsis)),
     ]);
   }
