@@ -73,7 +73,10 @@ function doPost(e) {
       if (request.includeMeta === true) {
         readResult.lastDataRow=bgLastDataRow_(request);
       }
-      if (request.includePresentation === true) readResult.presentation=bgPresentation_(request);
+      if (request.includePresentation === true) {
+        try { readResult.presentation=bgPresentation_(request); }
+        catch (presentationError) { readResult.presentationError='PRESENTATION_UNAVAILABLE'; }
+      }
       return bgOutput_(readResult);
     }
     if (request.action === 'history') {
