@@ -11,7 +11,8 @@ void main() {
     )));
     expect(tester.widget<TextField>(find.byType(TextField)).obscureText, isTrue);
     await tester.enterText(find.byType(TextField), 'unit-test-secret-123*');
-    expect(find.text('unit-test-secret-123*'), findsNothing);
+    expect(find.byWidgetPredicate((w) =>
+      w is Text && w.data == 'unit-test-secret-123*'), findsNothing);
     await tester.tap(find.text('Підтвердити'));
     await tester.pump();
     expect(received, 'unit-test-secret-123*');
@@ -25,6 +26,7 @@ void main() {
     await tester.tap(find.text('Підтвердити'));
     await tester.pump();
     expect(find.text('Неправильний пароль адміністратора.'), findsOneWidget);
-    expect(find.text('fake-wrong-test-code'), findsNothing);
+    expect(find.byWidgetPredicate((w) =>
+      w is Text && w.data == 'fake-wrong-test-code'), findsNothing);
   });
 }
