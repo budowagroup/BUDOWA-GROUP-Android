@@ -460,9 +460,9 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
         return ['Дата (РРРР-ММ-ДД)', 'Хто', 'Сума', 'Тип операції (Надходження/Витрати)',
           'Опис', 'Категорія', 'Об’єкт', 'Документ №'];
       case 'Закупівельники':
-        return ['Ім’я', 'Надходження', 'Витрати', 'Баланс'];
+        return ['Ім’я'];
       case 'Довідники':
-        return ['Категорія', 'Об’єкт'];
+        return ['Категорія'];
       default:
         return [];
     }
@@ -533,11 +533,11 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
         !lookupChoices(column).contains(value)) {
       return 'Оберіть значення з довідника';
     }
-    final optional = ['Опис', 'Категорія', 'Об’єкт', 'Документ №', 'Надходження', 'Витрати', 'Баланс'];
+    final optional = widget.tab == 'Операції' ? ['Опис', 'Категорія', 'Об’єкт', 'Документ №'] : <String>[];
     if (value.isEmpty && !optional.contains(label)) return 'Обов’язкове поле';
     if (['Сума', 'Надходження', 'Витрати', 'Баланс'].contains(label) && value.isNotEmpty) {
       final parsed = double.tryParse(value.replaceAll(' ', '').replaceAll(',', '.'));
-      if (parsed == null || !parsed.isFinite || (label != 'Баланс' && parsed < 0)) {
+      if (parsed == null || !parsed.isFinite || (label == 'Сума' && parsed <= 0)) {
         return 'Некоректна сума';
       }
     }
@@ -601,13 +601,11 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
               'Чернетки зникнуть після закриття екрана. Google Sheets не змінюється.'),
           if (widget.tab == 'Закупівельники') ...[
             const SizedBox(height: 8),
-            const Text('Надходження, витрати й баланс у таблиці є підсумковими '
-                'показниками. Поля тут призначені лише для тестування інтерфейсу.'),
+            const Text('Надходження, витрати й баланс обчислюються формулами Google Sheets. Редагується лише ім’я.'),
           ],
           if (widget.tab == 'Довідники') ...[
             const SizedBox(height: 8),
-            const Text('Категорії та об’єкти — окремі списки. '
-                'Заповніть потрібне поле; друге можна залишити порожнім.'),
+            const Text('Редагуються лише категорії. Об’єкти надходять із довідника активних об’єктів таблиці робочих годин.'),
           ],
           const SizedBox(height: 16),
           ...labels.map((label) => Padding(
@@ -624,20 +622,7 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
             ),
           )),
           FilledButton.icon(
-            onPressed: () {
-              if (widget.tab == 'Довідники' &&
-                  (controllers['Категорія']!.text.trim().isNotEmpty ||
-                   controllers['Об’єкт']!.text.trim().isNotEmpty)) {
-                setState(() {
-                  final record = {for (final entry in controllers.entries) entry.key: entry.value.text.trim()};
-                  if (editingIndex == null) { drafts.add(record); }
-                  else { drafts[editingIndex!] = record; }
-                  editingIndex = null;
-                });
-                return;
-              }
-              save();
-            },
+            onPressed: save,
             icon: const Icon(Icons.save_outlined),
             label: Text(editingIndex == null ? 'Додати чернетку' : 'Зберегти зміни'),
           ),
