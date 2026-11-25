@@ -20,7 +20,7 @@ List<TestField> testFields(String book, String tab) {
         TestField(4,'Кінець',kind:'time',required:true),
         TestField(5,'Перерва (год)',kind:'number'),
         TestField(9,'Аванс (zł)',kind:'number'),
-        TestField(10,'Місяць роботи'),
+        TestField(10,'Місяць авансу'),
         TestField(11,'Оплата (zł)',kind:'number'),
         TestField(12,'Місяць оплати'),
         TestField(14,'Примітка')];
@@ -149,6 +149,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       final match=RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(s);
       final d=DateTime.tryParse(s);
       if(!match||d==null||d.year<2020||d.year>2100||
+        (widget.book=='hours' && d.isBefore(DateTime(2026,8,17)))||
         '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}'!=s)
         return 'Дата РРРР-ММ-ДД';
     }
@@ -172,7 +173,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     if(f.kind=='date'){
       final chosen=await showDatePicker(context:context,
         initialDate:DateTime.tryParse(controllers[f.column]!.text)??DateTime.now(),
-        firstDate:DateTime(2020),lastDate:DateTime(2100));
+        firstDate:widget.book=='hours'?DateTime(2026,8,17):DateTime(2020),lastDate:DateTime(2100));
       if(chosen!=null)controllers[f.column]!.text=
         '${chosen.year}-${chosen.month.toString().padLeft(2,'0')}-${chosen.day.toString().padLeft(2,'0')}';
     } else {
@@ -220,6 +221,19 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       controllers[3]!.text==controllers[4]!.text){
       setState(()=>error='Початок і кінець роботи мають відрізнятися');
       return;
+    }
+    if (widget.tab=='Робочі години') {
+      for (final pair in const [(9,10),(11,12)]) {
+        final amount=double.tryParse(testNumber(controllers[pair.$1]!.text))??0;
+        if(amount>0 && controllers[pair.$2]!.text.trim().isEmpty){
+          setState(()=>error='Оберіть місяць авансу або оплати'); return;
+        }
+      }
+      final a=controllers[3]!.text.split(':').map(int.parse).toList();
+      final b=controllers[4]!.text.split(':').map(int.parse).toList();
+      final duration=(b[0]*60+b[1]-a[0]*60-a[1]+1440)%1440;
+      final pause=double.tryParse(testNumber(controllers[5]!.text))??0;
+      if(pause*60>=duration){setState(()=>error='Перерва має бути меншою за робочий час');return;}
     }
     final values=<String,String>{
       for(final f in fields) '${f.column}':
