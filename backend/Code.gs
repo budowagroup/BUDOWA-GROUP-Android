@@ -219,12 +219,12 @@ function bgValue_(target,index,raw) {
   var v=bgText_(raw);
   var book=target.book,tab=target.tab;
   if (book==='hours' && tab==='Робочі години') {
-    if (index===0) return bgDateValue_(v,target.spreadsheet);
+    if (index===0) { if (v<'2026-08-17') throw new Error('INVALID_DATE'); return bgDateValue_(v,target.spreadsheet); }
     if (index===3 || index===4) return bgTime_(v);
     if (index===5 || index===9 || index===11) return v===''? '':bgNumber_(v,false);
   }
   if (book==='hours' && tab==='Історія ставок') {
-    if (index===1) return bgDateValue_(v,target.spreadsheet);
+    if (index===1) { if (v<'2026-08-17') throw new Error('INVALID_DATE'); return bgDateValue_(v,target.spreadsheet); }
     if (index===2) return bgNumber_(v,true);
   }
   if (book==='finance' && tab==='Операції') {
@@ -248,7 +248,7 @@ function bgValidateRefs_(target,values) {
   if (target.book==='hours' && (target.tab==='Робочі години' ||
       target.tab==='Історія ставок')) {
     var employees=target.spreadsheet.getSheetByName('Працівники')
-      .getRange('A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
+      .getRange(target.tab==='Робочі години'?'F4:F53':'A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
     var employeeName=target.tab==='Робочі години' ? values['1'] : values['0'];
     if (employees.indexOf(employeeName)<0) {
       throw new Error('EMPLOYEE_NOT_FOUND');
@@ -256,8 +256,15 @@ function bgValidateRefs_(target,values) {
   }
   if (target.book==='hours' && target.tab==='Робочі години') {
     var sites=target.spreadsheet.getSheetByName('Обʼєкти')
-      .getRange('A4:A53').getDisplayValues().map(function(r){return r[0].trim();});
+      .getRange('E4:E53').getDisplayValues().map(function(r){return r[0].trim();});
     if (sites.indexOf(values['2'])<0) throw new Error('PROJECT_NOT_FOUND');
+    [[9,10],[11,12]].forEach(function(pair){
+      var month=String(values[String(pair[1])]||'').trim();
+      var rule=target.sheet.getRange(4,pair[1]+1).getDataValidation();
+      if (!rule || rule.getCriteriaType()!==SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) throw new Error('MISSING_MONTH_VALIDATION');
+      var allowed=rule.getCriteriaValues()[0];
+      if ((month && allowed.indexOf(month)<0) || (Number(values[String(pair[0])]||0)>0 && !month)) throw new Error('INVALID_PAYMENT_MONTH');
+    });
     if (values['3']===values['4']) throw new Error('INVALID_HOURS');
     var st=bgTime_(values['3']),en=bgTime_(values['4']);
     var duration=(en-st+1)%1*24;
@@ -267,16 +274,16 @@ function bgValidateRefs_(target,values) {
   }
   if (target.book==='finance' && target.tab==='Операції') {
     var buyers=target.spreadsheet.getSheetByName('Закупівельники')
-      .getRange('A4:A200').getDisplayValues().map(function(r){return r[0].trim();});
+      .getRange('A4:A103').getDisplayValues().map(function(r){return r[0].trim();});
     if (buyers.indexOf(values['2'])<0) throw new Error('BUYER_NOT_FOUND');
     if (values['7']) {
       var projects=target.spreadsheet.getSheetByName('Довідники')
-        .getRange('B4:B101').getDisplayValues().map(function(r){return r[0].trim();});
+        .getRange('B4:B53').getDisplayValues().map(function(r){return r[0].trim();});
       if (projects.indexOf(values['7'])<0) throw new Error('PROJECT_NOT_FOUND');
     }
     if (values['6']) {
       var cats=target.spreadsheet.getSheetByName('Довідники')
-        .getRange('A4:A101').getDisplayValues().map(function(r){return r[0].trim();});
+        .getRange('A4:A51').getDisplayValues().map(function(r){return r[0].trim();});
       if (cats.indexOf(values['6'])<0) throw new Error('CATEGORY_NOT_FOUND');
     }
   }
