@@ -425,22 +425,29 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
   }
 
   int? lookupColumn(String label) => widget.tab != 'Операції' ? null :
-      const {'Хто': 2, 'Категорія': 6, 'Об’єкт': 7}[label];
+      const {'Хто': 2, 'Тип операції (Надходження/Витрати)': 4, 'Категорія': 6, 'Об’єкт': 7}[label];
+
+  List<String> lookupChoices(int column) => column == 4
+      ? const ['Надходження', 'Витрати']
+      : widget.options[column] ?? const <String>[];
 
   Widget lookupField(String label, int column) {
-    final choices = widget.options[column] ?? const <String>[];
+    final choices = lookupChoices(column);
     final current = controllers[label]!.text;
-    final optional = column != 2;
+    final optional = column != 2 && column != 4;
     final items = <String>[if (optional) '', ...choices];
+    Color? operationColor(String value) => column != 4 ? null :
+        value == 'Надходження' ? const Color(0xFF176B4D) : const Color(0xFFAD3C32);
     Widget option(String value) => Row(children: [
-      if (column == 7 && value.isNotEmpty) ...[
+      if ((column == 7 || column == 4) && value.isNotEmpty) ...[
         Container(width: 20, height: 20, decoration: BoxDecoration(
-          color: widget.objectColor?.call(value) ?? Colors.white,
+          color: operationColor(value) ?? widget.objectColor?.call(value) ?? Colors.white,
           border: Border.all(color: Colors.black26),
           borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 8),
       ],
       Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
+        style: TextStyle(color: operationColor(value)),
         overflow: TextOverflow.ellipsis)),
     ]);
     return DropdownButtonFormField<String>(
@@ -449,7 +456,7 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
       isExpanded: true,
       decoration: InputDecoration(labelText: label,
         border: const OutlineInputBorder(),
-        helperText: choices.isEmpty ? 'Довідник порожній' : 'Google Sheets — TEST'),
+        helperText: column == 4 ? null : choices.isEmpty ? 'Довідник порожній' : 'Google Sheets — TEST'),
       items: items.map((value) => DropdownMenuItem(
         value: value, child: option(value))).toList(),
       onChanged: items.isEmpty ? null : (value) =>
@@ -462,7 +469,7 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
     final value = (raw ?? '').trim();
     final column = lookupColumn(label);
     if (column != null && value.isNotEmpty &&
-        !(widget.options[column] ?? const <String>[]).contains(value)) {
+        !lookupChoices(column).contains(value)) {
       return 'Оберіть значення з довідника';
     }
     final optional = ['Опис', 'Категорія', 'Об’єкт', 'Документ №', 'Надходження', 'Витрати', 'Баланс'];
