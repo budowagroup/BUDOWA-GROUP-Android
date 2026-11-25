@@ -12,12 +12,21 @@ void main() {
       objectColor: (_) => Colors.orange,
     )));
     final dropdowns = find.byType(DropdownButtonFormField<String>);
-    expect(dropdowns, findsNWidgets(3));
+    expect(dropdowns, findsNWidgets(4));
     await tester.tap(dropdowns.first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Тестовий покупець').last);
     await tester.pumpAndSettle();
     expect(find.text('Тестовий покупець'), findsWidgets);
+    await tester.ensureVisible(dropdowns.at(1));
+    await tester.tap(dropdowns.at(1));
+    await tester.pumpAndSettle();
+    final income = find.text('Надходження').last;
+    final expense = find.text('Витрати').last;
+    expect(tester.widget<Text>(income).style?.color, const Color(0xFF176B4D));
+    expect(tester.widget<Text>(expense).style?.color, const Color(0xFFAD3C32));
+    await tester.tap(expense);
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
   });
 }
