@@ -255,6 +255,23 @@ class _BudowaAppState extends State<BudowaApp> {
 
   Color siteColor(String name) => presentation.objectColor(name);
 
+  // Ukrainian alphabet order (Unicode code-point order puts І before А).
+  int compareNames(String a, String b) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyzабвгґдеєжзиіїйклмнопрстуфхцчшщьюя';
+    final left = a.trim().toLowerCase().runes.toList();
+    final right = b.trim().toLowerCase().runes.toList();
+    int rank(int c) {
+      final char = String.fromCharCode(c);
+      final i = alphabet.indexOf(char);
+      return i >= 0 ? i : 1000 + c;
+    }
+    for (var i=0; i<left.length && i<right.length; i++) {
+      final diff = rank(left[i]).compareTo(rank(right[i]));
+      if (diff != 0) return diff;
+    }
+    return left.length.compareTo(right.length);
+  }
+
   Widget dataCard(List<String> record, int index) {
     final isHours = book == 'hours';
     final titleColumn = isHours
@@ -276,8 +293,10 @@ class _BudowaAppState extends State<BudowaApp> {
         : isWork ? cell(record,2)
         : isOperation ? cell(record,7) : '';
     return Card(
-      color: objectName.isEmpty ? const Color(0xF5FFFFFF)
-          : siteColor(objectName),
+      color: isOperation ? presentation.operationColor(cell(record,4))
+          : isWorker && cell(record,3)=='Ні' ? const Color(0xFFE06666)
+          : isSite && cell(record,2)=='Ні' ? const Color(0xFF9EC4E8)
+          : objectName.isEmpty ? const Color(0xF5FFFFFF) : siteColor(objectName),
       margin: const EdgeInsets.only(bottom: 9),
       child: Padding(
         padding: const EdgeInsets.all(13),
@@ -298,10 +317,15 @@ class _BudowaAppState extends State<BudowaApp> {
             infoLine('Тип', cell(record,4)),
           if (isOperation && cell(record,3).isNotEmpty)
             Padding(padding: const EdgeInsets.only(top: 6), child: Text(
-              cell(record,3), style: TextStyle(fontSize: 21,
-                fontWeight: FontWeight.bold,
-                color: cell(record,4)=='Витрати'
-                  ? const Color(0xFFAD3C32) : const Color(0xFF176B4D)))),
+              cell(record,3), style: const TextStyle(fontSize: 21,
+                fontWeight: FontWeight.bold, color: Colors.black87))),
+          if (isOperation && objectName.isNotEmpty)
+            Padding(padding: const EdgeInsets.only(top: 6),
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: siteColor(objectName),
+                  border: Border.all(color: Colors.black12), borderRadius: BorderRadius.circular(4)),
+                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Text(objectName, style: const TextStyle(color: Colors.black87))))),
           if (canWriteTest && editableTab &&
                 !<String>{'Закупівельники', 'Довідники'}.contains(tab))
             Align(alignment: Alignment.centerRight,
@@ -314,7 +338,7 @@ class _BudowaAppState extends State<BudowaApp> {
             if (cell(record,i).isNotEmpty &&
                 i != titleColumn &&
                 !(isWork && (i==0 || i==2 || i==3 || i==4)) &&
-                !(isOperation && (i==1 || i==3 || i==4)) &&
+                !(isOperation && (i==1 || i==3 || i==4 || i==7)) &&
                 !(isWorker && i==5) &&
                 !(isSite && i==4))
               if (isCalculation) ...[
@@ -425,7 +449,7 @@ class _BudowaAppState extends State<BudowaApp> {
     }
     for (final records in grouped.values) {
       records.sort((a,b) {
-        final byName = cell(a,1).toLowerCase().compareTo(cell(b,1).toLowerCase());
+        final byName = compareNames(cell(a,1),cell(b,1));
         if (byName != 0) return byName;
         return cell(a,3).compareTo(cell(b,3));
       });
