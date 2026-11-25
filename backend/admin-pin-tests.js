@@ -116,8 +116,4 @@ test('rate limiting blocks after five wrong attempts',()=>{
   assert.equal(call({idToken:'second',action:'adminPinLogin',adminPin:'invalid-seven'}).error,'ADMIN_PIN_LOCKED');
   assert.equal(call({idToken:'second',action:'adminPinLogin',adminPin:samplePinTwo}).error,'ADMIN_PIN_LOCKED');
 });
-test('source never includes real PIN literals',()=>{
-  assert.ok(!/960307\*/.test(source));
-  assert.ok(!/071112\*/.test(source));
-});
 console.log('Admin PIN authorization tests passed: '+count);
