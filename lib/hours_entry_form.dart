@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 /// TEST-only entry form. It never writes to Google Sheets.
 class HoursEntryForm extends StatefulWidget {
-  const HoursEntryForm({super.key});
+  final Map<int, List<String>> options;
+  final Color Function(String)? objectColor;
+  const HoursEntryForm({super.key, this.options = const {}, this.objectColor});
   @override
   State<HoursEntryForm> createState() => _HoursEntryFormState();
 }
@@ -12,6 +14,9 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
   final employee = TextEditingController();
   final object = TextEditingController();
   final advance = TextEditingController(text: '0');
+  final payment = TextEditingController(text: '0');
+  String advanceMonth = '';
+  String paymentMonth = '';
   final note = TextEditingController();
   DateTime date = DateTime.now();
   TimeOfDay? start;
@@ -27,11 +32,14 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
     employee.dispose();
     object.dispose();
     advance.dispose();
+    payment.dispose();
     note.dispose();
     super.dispose();
   }
 
   int minutes(TimeOfDay time) => time.hour * 60 + time.minute;
+  int get durationMinutes => start == null || end == null ? 0 : (minutes(end!) - minutes(start!) + 1440) % 1440;
+  bool get validDuration => durationMinutes > breakMinutes;
   String display(TimeOfDay? time) => time == null
       ? 'Оберіть час'
       : '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
@@ -47,8 +55,7 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
 
   void saveLocalDraft() {
     final formValid = key.currentState!.validate();
-    final validTime = start != null && end != null &&
-        minutes(end!) > minutes(start!) + breakMinutes;
+    final validTime = validDuration;
     if (!formValid || !validTime) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Перевірте обов’язкові поля, час і перерву')));
@@ -61,8 +68,11 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
       'start': display(start),
       'end': display(end),
       'break': breakMinutes.toString(),
-      'hours': ((minutes(end!) - minutes(start!) - breakMinutes) / 60).toStringAsFixed(2),
+      'hours': ((durationMinutes - breakMinutes) / 60).toStringAsFixed(2),
       'advance': advance.text.trim().replaceAll(',', '.'),
+      'advanceMonth': advanceMonth,
+      'payment': payment.text.trim().replaceAll(',', '.'),
+      'paymentMonth': paymentMonth,
       'note': note.text.trim(),
     };
     setState(() {
@@ -92,16 +102,51 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
       end = TimeOfDay(hour: endParts[0], minute: endParts[1]);
       breakMinutes = int.parse(data['break']!);
       advance.text = data['advance']!;
+      advanceMonth = data['advanceMonth'] ?? '';
+      payment.text = data['payment'] ?? '0';
+      paymentMonth = data['paymentMonth'] ?? '';
       note.text = data['note']!;
       preview = false;
     });
   }
 
+  Widget referenceField(int column, String label, TextEditingController controller) {
+    final choices = widget.options[column] ?? const <String>[];
+    return DropdownButtonFormField<String>(
+      key: ValueKey((column, editingIndex, controller.text)),
+      initialValue: choices.contains(controller.text) ? controller.text : null,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      items: choices.map((v) => DropdownMenuItem(value: v, child: Row(children: [
+        if (column == 2) ...[Container(width: 20, height: 20,
+          color: widget.objectColor?.call(v) ?? Colors.white), const SizedBox(width: 8)],
+        Expanded(child: Text(v, overflow: TextOverflow.ellipsis)),
+      ]))).toList(),
+      onChanged: (v) => setState(() { controller.text = v ?? ''; preview = false; }),
+      validator: (v) => v == null || !choices.contains(v) ? 'Оберіть значення з довідника' : null,
+    );
+  }
+
+  Widget monthField(int column, String label, String current, ValueChanged<String> change) {
+    final choices = ['', ...?widget.options[column]];
+    return DropdownButtonFormField<String>(
+      key: ValueKey((column, editingIndex, current)),
+      initialValue: choices.contains(current) ? current : '',
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+      items: choices.map((v) => DropdownMenuItem(value: v, child: Text(v.isEmpty ? 'Не вибрано' : v))).toList(),
+      onChanged: (v) => setState(() { change(v ?? ''); preview = false; }),
+      validator: (v) {
+        final amount = double.tryParse((column == 10 ? advance : payment).text.replaceAll(',', '.')) ?? 0;
+        return amount > 0 && (v == null || v.isEmpty) ? 'Оберіть місяць' : null;
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final validTime = start != null && end != null &&
-        minutes(end!) > minutes(start!) + breakMinutes;
-    final totalMinutes = validTime ? minutes(end!) - minutes(start!) - breakMinutes : 0;
+    final validTime = validDuration;
+    final totalMinutes = validTime ? durationMinutes - breakMinutes : 0;
     return Scaffold(
       appBar: AppBar(title: const Text('Новий запис — TEST')),
       body: Form(
@@ -109,13 +154,9 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
         child: ListView(padding: const EdgeInsets.all(16), children: [
           const Text('TEST: створення та редагування локальних чернеток. Дані зникнуть після закриття екрана. Запис у Google Sheets вимкнено.'),
           const SizedBox(height: 16),
-          TextFormField(controller: employee, decoration: const InputDecoration(
-            labelText: 'Працівник', border: OutlineInputBorder()),
-            validator: (v) => v == null || v.trim().isEmpty ? 'Вкажіть працівника' : null),
+          referenceField(1, 'Працівник', employee),
           const SizedBox(height: 12),
-          TextFormField(controller: object, decoration: const InputDecoration(
-            labelText: 'Об’єкт', border: OutlineInputBorder()),
-            validator: (v) => v == null || v.trim().isEmpty ? 'Вкажіть об’єкт' : null),
+          referenceField(2, 'Об’єкт', object),
           const SizedBox(height: 12),
           ListTile(
             title: const Text('Дата'),
@@ -123,7 +164,7 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
             trailing: const Icon(Icons.calendar_month),
             onTap: () async {
               final chosen = await showDatePicker(context: context, initialDate: date,
-                firstDate: DateTime(2020), lastDate: DateTime(2100));
+                firstDate: DateTime(2026, 8, 17), lastDate: DateTime(2100));
               if (chosen != null) setState(() { date = chosen; preview = false; });
             },
           ),
@@ -146,6 +187,14 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
               return value == null || !value.isFinite || value < 0 ? 'Вкажіть суму від 0' : null;
             }),
           const SizedBox(height: 12),
+          monthField(10, 'Місяць авансу', advanceMonth, (v) => advanceMonth = v),
+          const SizedBox(height: 12),
+          TextFormField(controller: payment, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Оплата (zł)', border: OutlineInputBorder()),
+            validator: (v) { final n = double.tryParse((v ?? '').replaceAll(',', '.')); return n == null || !n.isFinite || n < 0 ? 'Некоректна сума' : null; }),
+          const SizedBox(height: 12),
+          monthField(12, 'Місяць оплати', paymentMonth, (v) => paymentMonth = v),
+          const SizedBox(height: 12),
           TextFormField(controller: note, maxLines: 2,
             decoration: const InputDecoration(labelText: 'Примітка', border: OutlineInputBorder())),
           const SizedBox(height: 16),
@@ -156,7 +205,7 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
               final formValid = key.currentState!.validate();
               if (!validTime) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Час завершення має бути пізніше початку з урахуванням перерви')));
+                  content: Text('Час роботи має бути більшим за перерву')));
               }
               setState(() => preview = formValid && validTime);
             },
@@ -223,7 +272,8 @@ class _HoursEntryFormState extends State<HoursEntryForm> {
 /// The calculated payroll tab is derived from source data and remains read-only.
 class HoursTabDraftForm extends StatefulWidget {
   final String tab;
-  const HoursTabDraftForm({super.key, required this.tab});
+  final Map<int, List<String>> options;
+  const HoursTabDraftForm({super.key, required this.tab, this.options = const {}});
   @override
   State<HoursTabDraftForm> createState() => _HoursTabDraftFormState();
 }
@@ -237,7 +287,7 @@ class _HoursTabDraftFormState extends State<HoursTabDraftForm> {
   List<String> get labels {
     switch (widget.tab) {
       case 'Працівники':
-        return ['Працівник', 'Посада', 'Ставка netto/год', 'Активний (Так/Ні)'];
+        return ['Працівник', 'Посада', 'Активний (Так/Ні)'];
       case 'Обʼєкти':
       case 'Об’єкти':
         return ['Об’єкт', 'Адреса', 'Активний (Так/Ні)'];
@@ -334,7 +384,16 @@ class _HoursTabDraftFormState extends State<HoursTabDraftForm> {
           const SizedBox(height: 16),
           ...labels.map((label) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: TextFormField(
+            child: (widget.tab == 'Історія ставок' && label == 'Працівник') || label.startsWith('Активний')
+              ? DropdownButtonFormField<String>(
+                key: ValueKey((label, editingIndex, fields[label]!.text)),
+                initialValue: (label.startsWith('Активний') ? const ['Так', 'Ні'] : widget.options[0] ?? const <String>[]).contains(fields[label]!.text) ? fields[label]!.text : null,
+                isExpanded: true,
+                decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
+                items: (label.startsWith('Активний') ? const ['Так', 'Ні'] : widget.options[0] ?? const <String>[]).map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (v) => setState(() => fields[label]!.text = v ?? ''),
+                validator: (v) => validate(label, v),
+              ) : TextFormField(
               controller: fields[label],
               decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
               keyboardType: label.contains('Ставка')
