@@ -101,9 +101,10 @@ class SheetRecordEditor extends StatefulWidget {
   final int? sheetRow;
   final List<String>? original;
   final Map<int,List<String>> options;
+  final Color Function(String)? objectColor;
   final Future<void> Function(Map<String,String> values,String requestId) onSave;
   const SheetRecordEditor({super.key,required this.book,required this.tab,
-    required this.onSave,this.sheetRow,this.original,this.options=const {}});
+    required this.onSave,this.sheetRow,this.original,this.options=const {},this.objectColor});
   @override
   State<SheetRecordEditor> createState()=>_SheetRecordEditorState();
 }
@@ -247,6 +248,29 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
     }
   }
 
+  List<String> fieldChoices(TestField f) {
+    if (widget.options.containsKey(f.column)) {
+      return [if (!f.required) '', ...widget.options[f.column]!];
+    }
+    return f.kind == 'active' ? const ['Так','Ні'] : const ['Надходження','Витрати'];
+  }
+
+  Widget choiceLabel(TestField f, String value) {
+    final objectField = (widget.book == 'finance' && widget.tab == 'Операції' && f.column == 7)
+      || (widget.book == 'hours' && widget.tab == 'Робочі години' && f.column == 2);
+    return Row(children: [
+      if (objectField && value.isNotEmpty) ...[
+        Container(width: 20, height: 20, decoration: BoxDecoration(
+          color: widget.objectColor?.call(value) ?? Colors.white,
+          border: Border.all(color: Colors.black26),
+          borderRadius: BorderRadius.circular(4))),
+        const SizedBox(width: 8),
+      ],
+      Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
+        overflow: TextOverflow.ellipsis)),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:Text(widget.sheetRow==null?'Додати — TEST':'Редагувати — TEST')),
@@ -267,11 +291,7 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
       ...fields.map((f)=>Padding(padding:const EdgeInsets.only(bottom:12),
         child:(f.kind=='active'||f.kind=='operation'||widget.options.containsKey(f.column))
           ? DropdownButtonFormField<String>(
-              initialValue:(
-                widget.options.containsKey(f.column)
-                  ? widget.options[f.column]!
-                  : (f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
-              ).contains(controllers[f.column]!.text)
+              initialValue:fieldChoices(f).contains(controllers[f.column]!.text)
                   ? controllers[f.column]!.text : null,
               isExpanded:true,
               decoration:InputDecoration(
@@ -280,12 +300,8 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
                 helperText:widget.options.containsKey(f.column)
                     ? 'Дані з відповідного довідника Google Sheets' : null,
               ),
-              items:(
-                widget.options.containsKey(f.column)
-                  ? widget.options[f.column]!
-                  : (f.kind=='active'?const ['Так','Ні']:const ['Надходження','Витрати'])
-              ).map((s)=>DropdownMenuItem(value:s,child:Text(s,
-                  overflow:TextOverflow.ellipsis))).toList(),
+              items:fieldChoices(f).map((s)=>DropdownMenuItem(
+                value:s,child:choiceLabel(f,s))).toList(),
               onChanged:saving||isLockedName(f)?null:
                 (v){controllers[f.column]!.text=v??'';},
               validator:(v)=>check(f,v??controllers[f.column]!.text))
