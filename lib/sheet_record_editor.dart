@@ -102,9 +102,10 @@ class SheetRecordEditor extends StatefulWidget {
   final List<String>? original;
   final Map<int,List<String>> options;
   final Color Function(String)? objectColor;
+  final Color Function(int,String)? referenceColor;
   final Future<void> Function(Map<String,String> values,String requestId) onSave;
   const SheetRecordEditor({super.key,required this.book,required this.tab,
-    required this.onSave,this.sheetRow,this.original,this.options=const {},this.objectColor});
+    required this.onSave,this.sheetRow,this.original,this.options=const {},this.objectColor,this.referenceColor});
   @override
   State<SheetRecordEditor> createState()=>_SheetRecordEditorState();
 }
@@ -272,12 +273,14 @@ class _SheetRecordEditorState extends State<SheetRecordEditor> {
   Widget choiceLabel(TestField f, String value) {
     final objectField = (widget.book == 'finance' && widget.tab == 'Операції' && f.column == 7)
       || (widget.book == 'hours' && widget.tab == 'Робочі години' && f.column == 2);
+    final financeReference = widget.book=='finance' && widget.tab=='Операції' && const [2,4,6,7].contains(f.column);
     final operationColor = f.kind != 'operation' ? null :
         value == 'Надходження' ? const Color(0xFFD9EAD3) : Colors.white;
+    final color = financeReference ? widget.referenceColor?.call(f.column,value) ?? operationColor ?? (objectField ? widget.objectColor?.call(value) : null) ?? Colors.white : objectField ? widget.objectColor?.call(value) : null;
     return Row(children: [
-      if ((objectField || operationColor != null) && value.isNotEmpty) ...[
+      if (color != null && value.isNotEmpty) ...[
         Container(width: 20, height: 20, decoration: BoxDecoration(
-          color: operationColor ?? widget.objectColor?.call(value) ?? Colors.white,
+          color: color,
           border: Border.all(color: Colors.black26),
           borderRadius: BorderRadius.circular(4))),
         const SizedBox(width: 8),
