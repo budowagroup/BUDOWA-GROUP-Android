@@ -380,7 +380,10 @@ class _HoursTabDraftFormState extends State<HoursTabDraftForm> {
 /// Finance TEST local-only drafts. Calculated dashboard is intentionally read-only.
 class FinanceTabDraftForm extends StatefulWidget {
   final String tab;
-  const FinanceTabDraftForm({super.key, required this.tab});
+  final Map<int, List<String>> options;
+  final Color Function(String)? objectColor;
+  const FinanceTabDraftForm({super.key, required this.tab,
+    this.options = const {}, this.objectColor});
   @override
   State<FinanceTabDraftForm> createState() => _FinanceTabDraftFormState();
 }
@@ -421,8 +424,47 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
     super.dispose();
   }
 
+  int? lookupColumn(String label) => widget.tab != 'Операції' ? null :
+      const {'Хто': 2, 'Категорія': 6, 'Об’єкт': 7}[label];
+
+  Widget lookupField(String label, int column) {
+    final choices = widget.options[column] ?? const <String>[];
+    final current = controllers[label]!.text;
+    final optional = column != 2;
+    final items = <String>[if (optional) '', ...choices];
+    Widget option(String value) => Row(children: [
+      if (column == 7 && value.isNotEmpty) ...[
+        Container(width: 20, height: 20, decoration: BoxDecoration(
+          color: widget.objectColor?.call(value) ?? Colors.white,
+          border: Border.all(color: Colors.black26),
+          borderRadius: BorderRadius.circular(4))),
+        const SizedBox(width: 8),
+      ],
+      Expanded(child: Text(value.isEmpty ? 'Не вибрано' : value,
+        overflow: TextOverflow.ellipsis)),
+    ]);
+    return DropdownButtonFormField<String>(
+      key: ValueKey((label, editingIndex, current)),
+      initialValue: items.contains(current) ? current : null,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: label,
+        border: const OutlineInputBorder(),
+        helperText: choices.isEmpty ? 'Довідник порожній' : 'Google Sheets — TEST'),
+      items: items.map((value) => DropdownMenuItem(
+        value: value, child: option(value))).toList(),
+      onChanged: items.isEmpty ? null : (value) =>
+        setState(() => controllers[label]!.text = value ?? ''),
+      validator: (value) => validate(label, value),
+    );
+  }
+
   String? validate(String label, String? raw) {
     final value = (raw ?? '').trim();
+    final column = lookupColumn(label);
+    if (column != null && value.isNotEmpty &&
+        !(widget.options[column] ?? const <String>[]).contains(value)) {
+      return 'Оберіть значення з довідника';
+    }
     final optional = ['Опис', 'Категорія', 'Об’єкт', 'Документ №', 'Надходження', 'Витрати', 'Баланс'];
     if (value.isEmpty && !optional.contains(label)) return 'Обов’язкове поле';
     if (['Сума', 'Надходження', 'Витрати', 'Баланс'].contains(label) && value.isNotEmpty) {
@@ -502,7 +544,9 @@ class _FinanceTabDraftFormState extends State<FinanceTabDraftForm> {
           const SizedBox(height: 16),
           ...labels.map((label) => Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: TextFormField(
+            child: lookupColumn(label) != null
+              ? lookupField(label, lookupColumn(label)!)
+              : TextFormField(
               controller: controllers[label],
               decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
               keyboardType: ['Сума', 'Надходження', 'Витрати', 'Баланс'].contains(label)
