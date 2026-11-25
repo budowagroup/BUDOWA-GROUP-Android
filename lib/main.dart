@@ -589,7 +589,7 @@ class _BudowaAppState extends State<BudowaApp> {
       if (!mounted) return;
       var health = ApiHealthStatus.fromResponse(result);
       if (health.role == 'admin') {
-        // The server must enforce this factor; old v0.5 cannot grant access.
+        // A Google account alone must not grant admin access.
         if (result['adminPinRequired'] != true) {
           throw Exception('Сервер v0.6 із паролями адміністраторів ще не налаштовано.');
         }
@@ -601,328 +601,7 @@ class _BudowaAppState extends State<BudowaApp> {
             }, idToken);
             final session = response['adminSession'];
             if (response['role'] != 'admin' || session is! String ||
-                !RegExp(r'^[0-9a-fA-F-]{72}
-        token = idToken;
-        role = health.role;
-        apiVersion = health.version;
-        apiDataSource = health.dataSource;
-        canWriteTest = health.canWriteTest;
-      });
-      await load();
-    } catch (e) {
-      await google.signOut();
-      if (mounted) setState(() {
-        account = null; token = null; role = null;
-        apiVersion = null; apiDataSource = null;
-        canWriteTest = false; error = '$e';
-      });
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> load() async {
-    final t = token;
-    if (t == null) return;
-    setState(() { busy = true; error = null; });
-    try {
-      final selectedBook = book;
-      final selectedTab = tab;
-      final currentAccount = account;
-      if (currentAccount == null) return;
-      final currentAuth = await currentAccount.authentication;
-      final freshToken = currentAuth.idToken;
-      if (freshToken == null) throw Exception('Не вдалося оновити Google ID Token. Увійдіть повторно.');
-      // Read every record, including those after fully empty page blocks.
-      // v0.5 optionally tells us the last meaningful source row, reducing
-      // requests without losing the original physical row numbers.
-      const pageSize = 100;
-      const maxPages = 100; // Explicit cap: 10 000 source rows.
-      var startRow = selectedBook == 'finance' && selectedTab == 'Панель'
-          ? 3 : selectedTab == 'Розрахунок' ? 5 : 4;
-      final parsed = <List<String>>[];
-      final rowNumbers = <int>[];
-      var reachedEnd = false;
-      int? lastDataRow;
-      for (var page = 0; page < maxPages; page++) {
-        if (!mounted || account != currentAccount ||
-            book != selectedBook || tab != selectedTab) return;
-        final result = await request({
-          'action': 'read', 'book': selectedBook, 'tab': selectedTab,
-          'start': startRow, 'limit': pageSize,
-          if (page == 0 && apiVersion == '0.5') 'includeMeta': true,
-        }, freshToken);
-        if (page == 0 && result['lastDataRow'] is int) {
-          lastDataRow = result['lastDataRow'] as int;
-        }
-        final raw = result['rows'];
-        if (raw is! List || raw.any((row) => row is! List)) {
-          throw const FormatException('Некоректний формат рядків API');
-        }
-        final portion = raw.map<List<String>>((row) =>
-          (row as List).map<String>((value) =>
-            value == null ? '' : '$value').toList()).toList();
-        if (lastDataRow != null && lastDataRow < startRow) {
-          reachedEnd = true;
-          break;
-        }
-        if (portion.isEmpty) {
-          reachedEnd = true;
-          break;
-        }
-        parsed.addAll(portion);
-        for (var i = 0; i < portion.length; i++) {
-          rowNumbers.add(startRow + i);
-        }
-        if (portion.length < pageSize ||
-            (lastDataRow != null &&
-                startRow + portion.length - 1 >= lastDataRow)) {
-          reachedEnd = true;
-          break;
-        }
-        startRow += portion.length;
-      }
-      if (!reachedEnd) {
-        throw const FormatException(
-          'Досягнуто межі 10000 рядків. Дані неповні — '
-          'потрібне збільшення ліміту.');
-      }
-      if (mounted && account == currentAccount && book == selectedBook && tab == selectedTab) {
-        setState(() { token = freshToken; rows = parsed; sheetRowNumbers = rowNumbers; });
-      }
-    } catch (e) {
-      if (mounted) setState(() => error = '$e');
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> openReadOnlyDiagnostics() async {
-    if (busy || account == null) return;
-    final selectedAccount = account!;
-    setState(() { busy = true; error = null; });
-    try {
-      final authorization = await selectedAccount.authentication;
-      final freshToken = authorization.idToken;
-      if (freshToken == null) {
-        throw Exception('Не вдалося отримати Google ID Token');
-      }
-      if (!mounted || account != selectedAccount) return;
-      await navigation.push<void>(ReadOnlyDiagnosticsScreen(
-            apiVersion: apiVersion ?? 'невідома',
-            dataSource: apiDataSource ?? 'не підтверджено',
-            read: (tab) => request(readOnlyPayload(tab), freshToken),
-          ),
-      );
-    } catch (exception) {
-      if (mounted) {
-        setState(() => error = 'Діагностику не запущено: $exception');
-      }
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Future<void> logout() async {
-    if (mounted) setState(() {
-      account = null; token = null; role = null;
-      apiVersion = null; apiDataSource = null;
-      rows = []; sheetRowNumbers = [];
-      canWriteTest = false; error = null;
-    });
-    await google.signOut();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final loggedIn = account != null && token != null;
-    final tabs = book == 'hours'
-      ? const ['Робочі години', 'Розрахунок', 'Працівники', 'Обʼєкти', 'Історія ставок']
-      : const ['Операції', 'Панель', 'Закупівельники', 'Довідники'];
-    return MaterialApp(
-      navigatorKey: navigation.navigatorKey,
-      scaffoldMessengerKey: navigation.scaffoldMessengerKey,
-      debugShowCheckedModeBanner: false,
-      title: 'BUDOWA GROUP',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: const Color(0xFF17365B)),
-      home: showLaunchSplash
-          ? const Scaffold(
-              backgroundColor: Color(0xFF0756A3),
-              body: SizedBox.expand(
-                child: Image(
-                  image: AssetImage('assets/images/splash_screen.webp'),
-                  fit: BoxFit.cover,
-                ),
-              ),
-            )
-          : Scaffold(
-        appBar: AppBar(title: const Text('BUDOWA GROUP — TEST'), actions: [
-          if (loggedIn) IconButton(onPressed: logout, icon: const Icon(Icons.logout), tooltip: 'Вийти')
-        ]),
-        body: Container(
-          decoration: const BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage('assets/images/background.webp'),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Container(
-            color: const Color(0xD9FFFFFF),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!loggedIn) ...[
-                      const Text('Тестовий режим. Доступ визначає сервер після перевірки Google ID token.'),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        onPressed: busy ? null : login,
-                        icon: const Icon(Icons.login),
-                        label: const Text('Увійти через Google'),
-                      ),
-                    ] else ...[
-                      Text(account!.email, maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                      Text('Роль: $role', style: const TextStyle(fontSize: 12)),
-                       Text(
-                         "API: ${apiVersion ?? 'невідома'} • Джерело: ${apiDataSource ?? 'не підтверджено'}",
-                         style: const TextStyle(fontSize: 12),
-                       ),
-                       Align(
-                         alignment: Alignment.centerLeft,
-                         child: TextButton.icon(
-                           onPressed: busy ? null : openReadOnlyDiagnostics,
-                           icon: const Icon(Icons.fact_check_outlined),
-                           label: const Text('Перевірити всі 9 вкладок (читання)'),
-                         ),
-                       ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('book-$book'),
-                        initialValue: book,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Розділ',
-                          border: OutlineInputBorder(),
-                          filled: true,
-                          fillColor: Colors.white,
-                          isDense: true,
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'hours', child: Text('Облік робочих годин')),
-                          DropdownMenuItem(value: 'finance', child: Text('Баланс і закупівлі')),
-                        ],
-                        onChanged: busy ? null : (v) {
-                          if (v == null || v == book) return;
-                          setState(() {
-                            book = v;
-                            tab = v == 'hours' ? 'Робочі години' : 'Операції';
-                            rows = [];
-                          });
-                          load();
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('tab-$book-$tab'),
-                        initialValue: tab,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Таблиця',
-                          border: OutlineInputBorder(),
-                          filled: true,
-                          fillColor: Colors.white,
-                          isDense: true,
-                        ),
-                        items: tabs.map((t) =>
-                          DropdownMenuItem(value: t, child: Text(t))).toList(),
-                        onChanged: busy ? null : (v) {
-                          if (v == null || v == tab) return;
-                          setState(() { tab = v; rows = []; });
-                          load();
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Row(children: [
-                        Expanded(child: OutlinedButton.icon(
-                          onPressed: busy ? null : load,
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Оновити'),
-                        )),
-                        if (book == 'hours' || book == 'finance') ...[
-                          const SizedBox(width: 8),
-                          Expanded(child: OutlinedButton.icon(
-                            onPressed: busy ? null : canWriteTest && editableTab
-                              ? () => openRecordEditor()
-                              : () => navigation.push<void>(
-                                  book == 'finance'
-                                    ? FinanceTabDraftForm(tab: tab)
-                                    : tab == 'Робочі години'
-                                      ? const HoursEntryForm()
-                                      : HoursTabDraftForm(tab: tab)),
-                            icon: Icon(canWriteTest && editableTab
-                              ? Icons.add_circle_outline : Icons.edit_note, size: 18),
-                            label: Text(canWriteTest && editableTab ? 'Додати' : 'Чернетка'),
-                          )),
-                        ],
-                      ]),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 5),
-                        child: Text(canWriteTest
-                          ? 'TEST • Запис дозволено лише у TEST-копії. Формули захищено.'
-                          : 'TEST • Лише читання. Запис на сервері вимкнено.',
-                          style: const TextStyle(color: Color(0xFF9A4500), fontSize: 12)),
-                      ),
-                      if (busy) const LinearProgressIndicator(),
-                      const SizedBox(height: 4),
-                      Expanded(
-                        child: rows.isEmpty
-                          ? Center(child: Text(busy
-                              ? 'Завантаження тестових даних…'
-                              : error != null
-                                ? 'Не вдалося завантажити дані'
-                                : 'Немає рядків для показу'))
-                          : book == 'finance' && tab == 'Панель'
-                            ? financeDashboard()
-                            : book == 'hours' && tab == 'Робочі години'
-                            ? workHoursView()
-                            : book == 'hours' && tab == 'Розрахунок'
-                            ? calculationByMonthView()
-                            : book == 'finance' && tab == 'Довідники'
-                            ? directoriesView()
-                            : book == 'finance' && tab == 'Операції'
-                            ? operationsView()
-                            : book == 'hours' && tab == 'Історія ставок'
-                            ? rateHistoryView()
-                            : ListView.builder(
-                              key: ValueKey('records-$book-$tab'),
-                              itemCount: rows.length,
-                              itemBuilder: (context, i) =>
-                                  hasVisibleValues(rows[i])
-                                      ? dataCard(rows[i], i)
-                                      : const SizedBox.shrink(),
-                            ),
-                      ),
-                    ],
-                    if (error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: SelectableText(error!,
-                          style: const TextStyle(color: Colors.red)),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}).hasMatch(session)) {
+                !RegExp(r'^[0-9a-fA-F-]{72}$').hasMatch(session)) {
               throw const FormatException('Сервер не підтвердив сесію.');
             }
             adminSession = session;
@@ -951,6 +630,7 @@ class _BudowaAppState extends State<BudowaApp> {
       await load();
     } catch (e) {
       await google.signOut();
+      adminSession = null;
       if (mounted) setState(() {
         account = null; token = null; role = null;
         apiVersion = null; apiDataSource = null;
@@ -990,7 +670,7 @@ class _BudowaAppState extends State<BudowaApp> {
         final result = await request({
           'action': 'read', 'book': selectedBook, 'tab': selectedTab,
           'start': startRow, 'limit': pageSize,
-          if (page == 0 && apiVersion == '0.5') 'includeMeta': true,
+          if (page == 0 && (apiVersion == '0.5' || apiVersion == '0.6')) 'includeMeta': true,
         }, freshToken);
         if (page == 0 && result['lastDataRow'] is int) {
           lastDataRow = result['lastDataRow'] as int;
@@ -1064,6 +744,7 @@ class _BudowaAppState extends State<BudowaApp> {
   }
 
   Future<void> logout() async {
+    adminSession = null;
     if (mounted) setState(() {
       account = null; token = null; role = null;
       apiVersion = null; apiDataSource = null;
